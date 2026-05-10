@@ -7,6 +7,8 @@ from .base import (
     detach_state,
     run_sequence,
 )
+from .gru import GRU
+from .lstm import LSTM
 
 __all__ = [
     "RecurrentCell",
@@ -16,4 +18,6 @@ __all__ = [
     "apply_episode_mask",
     "detach_state",
     "run_sequence",
+    "GRU",
+    "LSTM",
 ]
