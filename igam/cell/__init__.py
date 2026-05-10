@@ -8,6 +8,8 @@ from .base import (
     run_sequence,
 )
 from .gru import GRU
+from .linear_transformer import LinearTransformer
+from .lmu import LMU
 from .lstm import LSTM
 
 __all__ = [
@@ -19,5 +21,7 @@ __all__ = [
     "detach_state",
     "run_sequence",
     "GRU",
+    "LMU",
     "LSTM",
+    "LinearTransformer",
 ]
