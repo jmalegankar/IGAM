@@ -13,6 +13,8 @@ from .linear_transformer import LinearTransformer
 from .lmu import LMU
 from .lstm import LSTM
 from .mamba2 import Mamba2
+from .mlstm import mLSTM
+from .retnet import RetNet
 from .s4d import S4D
 
 __all__ = [
@@ -29,5 +31,7 @@ __all__ = [
     "LSTM",
     "LinearTransformer",
     "Mamba2",
+    "RetNet",
     "S4D",
+    "mLSTM",
 ]
