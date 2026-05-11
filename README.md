@@ -66,9 +66,49 @@ Run cheapest-first: Tier 1 with 1 seed on POPGym-easy before committing to Tier 
 
 ### Not yet built (next sessions)
 
-- **Gated DeltaNet** (the IGAM headline cell) — extends `DeltaNet` by adding the `α_t = σ(W_α φ(o_t))` decay gate before each update and maintaining the normalizer `n_t` for the read. Per ADR 0004, state is `(W, n)` — no separate `h_t`. ~150 LOC on top of `DeltaNet`.
-- **PPO integration** (Week 2 below) — port `LMURolloutBuffer` from `lmu_ppo`, wire cell into actor-critic, run on MiniGrid-Memory-S13 with `MemoryStartWrapper`.
-- **Tier 1 benchmark sweep** — POPGym easy + MiniGrid-Memory + BSuite.
+- **Tier 1 benchmark sweep** — POPGym easy + MiniGrid-Memory + BSuite. PPO integration is in place; just need to run.
+- **MiniGrid-Memory port** — `lmu_ppo`'s `MemoryStartWrapper` integration for the Phase A regression check at Week 2.
+
+### Running benchmarks
+
+The PPO trainer (`igam/ppo/igam_ppo.py`) is generic over any cell in `igam.cell`. Configs live in `benchmarks/phase_a/`. Quick start:
+
+```bash
+# Tier 1 canary — IGAM on POPGym-RepeatPrevious-Easy, 1M steps
+.venv/bin/python train.py --config benchmarks/phase_a/popgym_repeat_previous_easy.yaml --seed 0
+```
+
+Each run writes to `runs/<benchmark>/<cell>/seed_<n>_<timestamp>/`:
+- `config.yaml` — exact config used
+- `git_hash.txt` — commit hash at run start
+- `env.txt` — `pip freeze` output
+- `PPO_*/` — tensorboard event files
+- `eval/` — periodic eval episode results (npz)
+- `best_model/best_model.zip` — best-by-eval checkpoint
+- `final_model.zip` — last checkpoint
+
+### Monitoring (TensorBoard)
+
+```bash
+.venv/bin/python -m tensorboard --logdir runs/ --port 6006
+# open http://localhost:6006/
+```
+
+What to watch:
+
+| Metric | Meaning | Healthy range |
+|---|---|---|
+| `rollout/ep_rew_mean` | Training-time episode reward | trending up |
+| `eval/mean_reward` | Held-out env reward, deterministic policy | trending up; less noisy than rollout |
+| `train/policy_loss` | PPO surrogate loss | trending toward 0 |
+| `train/value_loss` | Critic MSE | trending toward 0 |
+| `train/approx_kl` | KL between old/new policy | <0.02; if it spikes, lower LR or clip_range |
+| `train/explained_variance` | 1 − Var(returns − values) / Var(returns) | → 1 |
+| `train/entropy_loss` | Negative policy entropy | trending toward 0 (less exploration over time) |
+| `grad/{encoder,cell,actor,critic}_norm` | Per-component grad norms (README discipline) | <max_grad_norm (default 0.5) |
+| `debug/innovation_mag_mean` | `‖δ_t‖` for DeltaNet/IGAM cells | non-zero, bounded |
+| `debug/state_*_norm_*` | Per-state-component magnitudes | bounded; watch for explosion |
+| `debug/action_frac_*` | Action distribution | shouldn't collapse to one action early |
 
 ---
 

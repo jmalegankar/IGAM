@@ -1,0 +1,37 @@
+# POPGym RepeatPrevious-Easy — Phase A Tier 1 canary benchmark.
+#
+# Task: Discrete(4) obs, Discrete(4) action, ~52-step episodes, K=4 lookback.
+# Smallest associative-recall task in POPGym. If IGAM can't solve this,
+# nothing harder will work — fast sanity check before committing to longer runs.
+#
+# Defaults are calibrated for the headline cell (GatedDeltaNet ≡ IGAM).
+# Override with --seed / --total-timesteps from CLI to sweep.
+
+env_name: popgym-RepeatPreviousEasy-v0
+n_envs: 8
+total_timesteps: 1_000_000
+seed: 0
+
+cell:
+  name: IGAM             # alias for GatedDeltaNet
+  kwargs:
+    n_heads: 4
+
+encoder_dim: 64
+encoder_hidden: 128
+
+# PPO hyperparameters — defaults from the lmu_ppo thesis codebase, with
+# higher gamma (0.999) replaced by 0.99 since POPGym episodes are short.
+lr: 3.0e-4
+n_steps: 1024            # per-env; rollout = n_envs * n_steps = 8192 transitions
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+# TBPTT chunking
+chunk_len: 16            # K from ADR 0001 / README
+n_chunks_per_batch: 16   # B per PPO minibatch → 16*16 = 256 transitions per update
