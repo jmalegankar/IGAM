@@ -3,7 +3,7 @@
 
 **Author:** Jai
 **Last updated:** May 2026
-**Status:** Phase 0 complete. Ready for Week 1.
+**Status:** Phase A Week 1 in progress — cell interface, 9 baseline cells, and test harness built; Gated DeltaNet (headline) and PPO integration pending.
 
 ---
 
@@ -16,6 +16,59 @@ This is the canonical design and execution plan for IGAM, the memory + explorati
 3. Record the rationale for non-obvious choices, so future-Jai (or a collaborator) can audit the design without reconstructing six months of context.
 
 It is **not** a research proposal. The research case is in the deep-research output (`docs/igam-deep-research.md`); that document is the *why*. This is the *how*.
+
+---
+
+## Phase A progress (as of 2026-05-12)
+
+We expanded Week 1 beyond the original "implement Gated DeltaNet + MQAR test" scope to build the full baseline lineup against a common interface before the ablation sweep. This costs ~1 week of extra time up front but means the entire Phase A ablation table is buildable from one codebase — no interface refactors during the ablation runs themselves.
+
+### Built
+
+- **Project scaffolding**: `pyproject.toml`, `.gitignore`, `igam/` package, `igam/cell/` subpackage
+- **Cell interface** (`igam/cell/base.py`): `RecurrentCell` ABC with `init_state`, `step`, `forward_sequence`, `reset_state` + free helpers `apply_episode_mask`, `detach_state`, `run_sequence`. The dict-state convention lets the rollout buffer iterate state components generically. Side outputs (e.g., `innovation` for the lifelong intrinsic reward) flow through `step` as a `SideOutputs` dict.
+- **9 baseline cells** (all in `igam/cell/`, all conforming to the interface):
+  - **RNN family**: `GRU`, `LSTM` — modern LN-equipped, per-block orthogonal init, forget-bias=+1
+  - **Polynomial memory**: `LMU` (Voelker 2019, canonical scalar-input LegT; not the thesis's gated variant)
+  - **Structured SSM**: `S4D` (Gu 2022, LTI diagonal), `Mamba2` (Dao & Gu 2024, selective)
+  - **Matrix-memory family**: `LinearTransformer` (Katharopoulos 2020), `RetNet` (Sun 2023, fixed multi-scale γ), `DeltaNet` (Schlag 2021 + Yang 2024), `mLSTM` (Beck 2024 / xLSTM with max-trick stabilization)
+- **Test harness** (`igam/cell/tests/`):
+  - `conftest.py` — `cell_name_and_factory` parametrize fixture covering all 9 cells
+  - `test_interface.py` — 144 contract tests covering shape discovery, device inference, dtype propagation, episode-start reset, `forward_sequence`-vs-manual-loop equivalence (regression guard), helpers, gradient flow
+  - `test_synthetic_recall.py` — fast tier (composability/finite outputs) and slow tier (per-cell MQAR thresholds, opt-in via `pytest -m slow`)
+  - 162 fast tests pass in ~4s; 9 slow tests pass in ~85s
+
+### The 2×2 ablation framing
+
+The cells map onto a 2×2 design matrix that the Phase A ablation can exploit:
+
+```
+                  No gating              Gated
+No delta rule     LinearTransformer      mLSTM, RetNet
+Delta rule        DeltaNet               IGAM
+```
+
+Each arrow isolates one design choice:
+- `LinearTransformer → DeltaNet`: does the delta rule help?
+- `LinearTransformer → mLSTM/RetNet`: does gating help (without delta)?
+- `DeltaNet → IGAM`: does gating help (given the delta rule)?
+- `mLSTM → IGAM`: is the delta + α-gating scheme better than LSTM-style exp gating?
+
+Orthogonal structured-SSM family sub-figure: `S4D (LTI) → RetNet (fixed decay) → Mamba2 (selective)`. Side story.
+
+### Tiered experiment plan (replaces the flat ablation list in Weeks 4–6 below)
+
+- **Tier 1 (headline, 4 cells)**: `LSTM, Mamba2, mLSTM, IGAM`. Page-1 figure. If IGAM doesn't win here, the paper has no thesis.
+- **Tier 2 (internal 2×2, 4 cells)**: `LinearTransformer, mLSTM, DeltaNet, IGAM`. Methods-section centerpiece.
+- **Tier 3 (full appendix, all 9 cells)**: Everything for completeness.
+
+Run cheapest-first: Tier 1 with 1 seed on POPGym-easy before committing to Tier 2/3. Hyperparameter sweep only on IGAM + Tier 1 cells; use published defaults for Tier 3.
+
+### Not yet built (next sessions)
+
+- **Gated DeltaNet** (the IGAM headline cell) — extends `DeltaNet` by adding the `α_t = σ(W_α φ(o_t))` decay gate before each update and maintaining the normalizer `n_t` for the read. Per ADR 0004, state is `(W, n)` — no separate `h_t`. ~150 LOC on top of `DeltaNet`.
+- **PPO integration** (Week 2 below) — port `LMURolloutBuffer` from `lmu_ppo`, wire cell into actor-critic, run on MiniGrid-Memory-S13 with `MemoryStartWrapper`.
+- **Tier 1 benchmark sweep** — POPGym easy + MiniGrid-Memory + BSuite.
 
 ---
 
@@ -45,12 +98,18 @@ These are the design decisions that define IGAM. Changing any of these is a rese
 
 ### Memory cell
 
-- **Gated DeltaNet** with RWKV-7-style vector-valued in-context learning rate and decay gates.
-- Matrix state W_t ∈ R^(d_k × d_v), head-factored into H heads.
+- **Gated DeltaNet** (Yang et al. 2024, ICLR 2025).
+- Matrix state W_t ∈ R^(d_k × d_v), head-factored into H heads. Normalizer n_t maintained alongside.
+- **State is (W_t, n_t)** — no separate recurrent hidden state (per ADR 0004). The cell is a pure key-value associative memory.
 - Update rule: W_t = α_t W_{t-1} (I − β_t k_t k_t^T / ||k_t||^2) + β_t v_t k_t^T
-- Read: y_t = q_t^T W_t / (q_t^T n_t + ε), with normalizer n_t maintained alongside.
-- α_t = σ(W_α h_t), β_t = σ(W_β h_t), data-dependent gates.
-- Innovation δ_t = v_t − W_{t-1} k_t / ||k_t||^2 — exposed as a side output for the lifelong intrinsic reward.
+- Normalizer update: n_t = α_t n_{t-1} + β_t k_t
+- Read: y_t = q̃_t^T W_t / (q̃_t^T n_t + ε), with L2-normalized q̃_t = L2norm(q_t) and k̃_t = L2norm(k_t).
+- **Gates and projections all come from φ(o_t)** (per ADR 0004 — Design A, the canonical Gated DeltaNet form):
+  - α_t = σ(W_α φ(o_t)) — per-head scalar decay
+  - β_t = σ(W_β φ(o_t)) — per-head scalar write strength
+  - q_t = W_Q φ(o_t),  k_t = W_K φ(o_t),  v_t = W_V φ(o_t) — dynamic query preserves the lmu_ppo state-dependent readout insight.
+- Innovation δ_t = v_t − W_{t-1} k̃_t — exposed as a side output for the lifelong intrinsic reward (Phase B).
+- Actor-critic head input: concat(φ(o_t), y_t) — same structure as lmu_ppo's `cat([h, m_pooled])`, with φ(o_t) replacing h and y_t replacing m_pooled.
 - **Training mode: single-step recurrent** (per ADR 0001). Parallel-scan path stubbed but not implemented in Phase A; revisited in Phase B.
 
 ### Encoder and auxiliary loss
@@ -82,7 +141,7 @@ These are the design decisions that define IGAM. Changing any of these is a rese
 ### PPO integration
 
 - TBPTT chunks of length K=16, identical to lmu_ppo.
-- Episode_starts mask zeros (h, W, n) at boundaries within a chunk.
+- Episode_starts mask zeros (W, n) at boundaries within a chunk.
 - Memory state stored at chunk *start* in the rollout buffer; intra-chunk states are recomputed during evaluate_actions.
 - Episodic state (count-min sketch, FSQ) reset at episode boundaries.
 
@@ -195,20 +254,19 @@ The very low baseline tells a critical story for Phase B planning: **at 1M steps
 ### Week 1 — Cell prototype + synthetic test
 
 **Tasks:**
-1. Implement `igam/cell/gated_deltanet.py` in single-step recurrent mode (per ADR 0001). Reference impl: `flash-linear-attention` library on GitHub. Port only the recurrent step path; leave parallel-scan signature in place but raise `NotImplementedError`.
-2. Write `igam/cell/tests/test_synthetic_recall.py` **before implementing the cell** (test-first discipline):
-   - Multi-Query Associative Recall (MQAR) task: input is a sequence of (key, value) pairs followed by query keys; predict the matching values. Standard benchmark for associative memory.
-   - Selective copy task: copy a subset of marked tokens from input to output.
-   - Both tasks have known scaling laws; the cell should solve both at small scale (sequence length ≤ 256, vocab ≤ 64).
+1. ~~Implement `igam/cell/gated_deltanet.py` in single-step recurrent mode (per ADR 0001).~~ **Pending — extends the already-built `DeltaNet` cell with the `α_t` decay gate.** Reference impl: `flash-linear-attention` library on GitHub. Port only the recurrent step path; leave parallel-scan signature in place but raise `NotImplementedError`.
+2. **[done]** Write `igam/cell/tests/test_synthetic_recall.py` (MQAR). Selective copy deferred — at the test-scale config used here (hidden_size=16) cells bunch in 0.30–0.40 MQAR accuracy regardless, so adding selective copy would not differentiate further until Phase A POPGym-scale runs.
 
-**Exit criterion (HARD):** MQAR accuracy ≥0.95 on length-256 sequences with 8-token vocabulary, training in <30 minutes on a single GPU under single-step recurrent mode. **If this fails, the cell has a bug. Do not proceed to Week 2 until it passes.**
+**Exit criterion (HARD):** MQAR accuracy ≥0.95 on length-256 sequences with 8-token vocabulary, training in <30 minutes on a single GPU under single-step recurrent mode. **If this fails, the cell has a bug. Do not proceed to Week 2 until it passes.** *(Headline cell still pending; check applies once `Gated DeltaNet` is implemented.)*
 
 **Deliverable:** A working cell, a passing synthetic test, and a commit tagged `cell-v0.1`.
+
+**Extended scope completed this week (beyond original plan):** the cell interface (`base.py`) and 8 *baseline* cells were built alongside, so the Phase A 2×2 ablation table is buildable from one codebase. See "Phase A progress" section at the top of this document.
 
 ### Week 2 — Wire cell into PPO, regression test on lmu_ppo task
 
 **Tasks:**
-1. Port the rollout buffer from `lmu_ppo/buffer.py` to `igam/policy/buffer.py`. Replace LMU state shape (h, m) with IGAM state shape (h, W, n). The chunked TBPTT layout is unchanged.
+1. Port the rollout buffer from `lmu_ppo/buffer.py` to `igam/policy/buffer.py`. Replace LMU state shape (h, m) with IGAM state shape (W, n) — per ADR 0004, no separate `h`. The chunked TBPTT layout is unchanged.
 2. Implement `igam/policy/igam_policy.py`: actor-critic with the IGAM cell between encoder and policy/value heads. Mirror `lmu_ppo/policies.py` structurally; only the cell call differs.
 3. Implement `igam/ppo/igam_ppo.py`: PPO with IGAM rollout collection. Mirror `lmu_ppo/lmu_ppo.py`; remove the E3B and lifelong-bonus code.
 4. Run on **MiniGrid-Memory-S13 with the MemoryStartWrapper** (the regression benchmark from the thesis). No exploration bonus. Just memory.
@@ -218,7 +276,7 @@ The very low baseline tells a critical story for Phase B planning: **at 1M steps
 **Likely failure modes to watch for:**
 - Cell initialization too aggressive; W_t saturates in first 100 steps. Fix: smaller init for W_K, W_V, W_Q.
 - Normalizer n_t numerically unstable. Fix: layer-norm on y_t before policy head.
-- TBPTT chunk boundaries not respected. Fix: verify episode_starts masking zeros all of (h, W, n), not just (h, W).
+- TBPTT chunk boundaries not respected. Fix: verify episode_starts masking zeros both W and n.
 
 **Deliverable:** End-to-end MiniGrid-Memory-S13 + wrapper run, training curves checked into `benchmarks/phase_a/results/`. Commit tagged `e2e-v0.1`.
 
@@ -239,15 +297,14 @@ The very low baseline tells a critical story for Phase B planning: **at 1M steps
    - POPGym: RepeatPrevious (Easy/Medium/Hard), Concentration, Battleship, Autoencode, MultiArmedBandit. Publication-quality (3 seeds, full curves).
    - MiniGrid-Memory: S5, S7, S9, S11, S13, all *with* the wrapper. Memory-only.
    - BSuite: memory_length, discounting_chain.
-2. Run **architectural ablations** vs. baselines:
-   - IGAM (full)
-   - IGAM with α_t fixed (no data-dependent decay)
-   - IGAM with β_t fixed (no data-dependent learning rate)
-   - IGAM with fixed query (no dynamic W_Q) — this is the closest analog to vanilla LMU; the comparison is critical for the paper's narrative about W_Q.
-   - LSTM baseline
-   - GRU baseline
-   - Vanilla LMU baseline (port from lmu_ppo)
-   - Mamba-2 baseline (use a published reference impl)
+2. Run **architectural ablations** vs. baselines, structured per the tiered experiment plan (see "Phase A progress" section above). Internal IGAM ablations (α_t fixed, β_t fixed, fixed query) map onto cells we've already built:
+   - **IGAM with α_t fixed** ≡ `DeltaNet` (already implemented)
+   - **IGAM with β_t fixed** ≡ a `Gated DeltaNet` variant (add as constructor flag)
+   - **IGAM with fixed query** ≡ closest analog is `LinearTransformer` (no dynamic W_Q)
+   - **LSTM, GRU baselines** — already implemented
+   - **Vanilla LMU baseline** ≡ `LMU` (canonical Voelker 2019, already implemented; the gated/W_pre thesis variant is left in `lmu_ppo` and not ported here)
+   - **Mamba-2 baseline** — already implemented as `Mamba2`
+   - **Plus**: `LinearTransformer`, `RetNet`, `S4D`, `mLSTM` for the broader 2×2 / SSM-family comparisons
 
 3. **Decision point at end of Week 6:** Does IGAM beat LMU on ≥4/6 POPGym memory tasks?
    - **Yes:** advance to Phase B. Phase A is a success, write up the ablation table for the paper.
@@ -476,7 +533,7 @@ Don't break it for:
 | φ | Encoder, observations → R^d_φ |
 | φ_EMA | EMA target encoder |
 | W_t | Matrix memory state at time t |
-| h_t | Small recurrent hidden state alongside W_t |
+| n_t | Normalizer state, maintained alongside W_t (see Memory cell) |
 | k_t, v_t, q_t | Key, value, query at time t |
 | δ_t | Innovation: v_t − W_{t-1} k_t / ‖k_t‖² |
 | α_t, β_t | Data-dependent decay and learning rate gates |

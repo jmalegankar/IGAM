@@ -8,6 +8,7 @@ from .base import (
     run_sequence,
 )
 from .deltanet import DeltaNet
+from .gated_deltanet import GatedDeltaNet
 from .gru import GRU
 from .linear_transformer import LinearTransformer
 from .lmu import LMU
@@ -26,6 +27,7 @@ __all__ = [
     "detach_state",
     "run_sequence",
     "DeltaNet",
+    "GatedDeltaNet",
     "GRU",
     "LMU",
     "LSTM",
