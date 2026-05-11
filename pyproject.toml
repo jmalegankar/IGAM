@@ -26,3 +26,7 @@ include = ["igam*"]
 [tool.pytest.ini_options]
 testpaths = ["igam"]
 python_files = ["test_*.py"]
+markers = [
+    "slow: full-training tests gated behind -m slow (deselected by default)",
+]
+addopts = "-m 'not slow'"
