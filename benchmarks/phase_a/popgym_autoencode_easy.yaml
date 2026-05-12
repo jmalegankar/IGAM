@@ -22,7 +22,17 @@
 
 env_name: popgym-AutoencodeEasy-v0
 n_envs: 8
-total_timesteps: 3_000_000
+
+# Budget calibration: POPGym paper (Morad 2023) and SHM paper (Le 2024)
+# both use ~15M env steps. Matrix-memory cells (Mamba2, mLSTM, IGAM, SHM)
+# at our smaller state size (~64-d) need most of this budget to converge.
+# LSTM/GRU often converge much earlier on Easy variants but the matrix
+# cells we're testing here need the full budget for a fair comparison.
+#
+# For quick Mac iteration: override with `--total-timesteps 3000000` (3M).
+# For serious GPU runs: leave at 15M default.
+total_timesteps: 15_000_000
+
 seed: 0
 
 cell:

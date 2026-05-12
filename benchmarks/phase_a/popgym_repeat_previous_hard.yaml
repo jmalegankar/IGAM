@@ -15,7 +15,12 @@
 
 env_name: popgym-RepeatPreviousHard-v0
 n_envs: 8
-total_timesteps: 5_000_000          # 5M; Hard needs more steps than Easy's 3M
+
+# Budget aligned with POPGym paper (Morad 2023): 15M env steps. Matrix-memory
+# cells under-train below ~10M at our small state sizes. For quick iteration
+# (Mac) override with `--total-timesteps 3000000`.
+total_timesteps: 15_000_000
+
 seed: 0
 
 cell:

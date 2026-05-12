@@ -9,7 +9,13 @@
 
 env_name: popgym-RepeatPreviousEasy-v0
 n_envs: 8
-total_timesteps: 1_000_000
+
+# Budget: 15M aligned with POPGym paper (Morad 2023). RepeatPrevious-Easy
+# is a CANARY test — LSTM solves it in <500k steps. Matrix-memory cells
+# need much longer to converge at our state sizes. For quick smoke checks
+# override with `--total-timesteps 1000000`.
+total_timesteps: 15_000_000
+
 seed: 0
 
 cell:
