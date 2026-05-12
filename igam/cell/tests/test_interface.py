@@ -132,9 +132,15 @@ class TestStep:
         # Build a state with non-zero rows.
         s_nonzero = {k: torch.randn_like(v) for k, v in cell.init_state(BATCH_SIZE).items()}
         mask = torch.tensor([True, False, True, False])
+
+        # Fork RNG: the two paths each call `step` once, which may consume
+        # random samples (SHM does). They must consume from the same RNG state
+        # to produce comparable outputs.
+        rng_state = torch.random.get_rng_state()
         y_partial, _, _ = cell.step(x, s_nonzero, episode_start=mask)
 
         # Independently: reset rows 0,2 by hand, leave 1,3 alone, run step with no mask.
+        torch.random.set_rng_state(rng_state)
         s_zero = cell.init_state(BATCH_SIZE)
         s_manual = {k: v.clone() for k, v in s_nonzero.items()}
         for k in s_manual:
@@ -172,10 +178,16 @@ class TestForwardSequence:
         x_seq = torch.randn(SEQ_LEN, BATCH_SIZE, INPUT_SIZE)
         s0 = cell.init_state(BATCH_SIZE)
 
+        # Fork RNG so both paths see the SAME stream of random numbers.
+        # Necessary for cells with internal stochasticity (e.g., SHM samples
+        # a random θ row per step); deterministic cells are unaffected.
+        rng_state = torch.random.get_rng_state()
+
         # Sequence path.
         y_seq_fwd, s_final_fwd, _ = cell.forward_sequence(x_seq, s0)
 
-        # Manual unroll.
+        # Manual unroll — restore RNG so it gets the same random samples.
+        torch.random.set_rng_state(rng_state)
         s = cell.init_state(BATCH_SIZE)
         ys_manual = []
         for t in range(SEQ_LEN):

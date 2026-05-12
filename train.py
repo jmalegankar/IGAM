@@ -53,6 +53,7 @@ from igam.cell import (
     GRU,
     LMU,
     LSTM,
+    SHM,
     DeltaNet,
     GatedDeltaNet,
     LinearTransformer,
@@ -78,6 +79,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "RetNet": RetNet,
     "mLSTM": mLSTM,
     "GatedDeltaNet": GatedDeltaNet,
+    "SHM": SHM,
     # IGAM is an alias for GatedDeltaNet (the cell IS the IGAM cell).
     "IGAM": GatedDeltaNet,
 }
@@ -96,6 +98,7 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "RetNet":            {"n_heads": 4},
     "mLSTM":             {"n_heads": 4},
     "GatedDeltaNet":     {"n_heads": 4},
+    "SHM":               {"L": 128},   # paper default for easy POPGym tasks
     "IGAM":              {"n_heads": 4},
 }
 

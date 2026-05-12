@@ -24,6 +24,7 @@ from igam.cell import (
     GRU,
     LMU,
     LSTM,
+    SHM,
     DeltaNet,
     GatedDeltaNet,
     LinearTransformer,
@@ -48,6 +49,7 @@ CELL_FACTORIES: dict[str, Callable[[int, int], RecurrentCell]] = {
     "RetNet":            lambda i, h: RetNet(i, h, n_heads=2),
     "mLSTM":             lambda i, h: mLSTM(i, h, n_heads=2),
     "GatedDeltaNet":     lambda i, h: GatedDeltaNet(i, h, n_heads=2),
+    "SHM":               lambda i, h: SHM(i, h, L=32),  # smaller L for fast tests
 }
 
 

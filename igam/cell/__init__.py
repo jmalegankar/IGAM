@@ -17,6 +17,7 @@ from .mamba2 import Mamba2
 from .mlstm import mLSTM
 from .retnet import RetNet
 from .s4d import S4D
+from .shm import SHM
 
 __all__ = [
     "RecurrentCell",
@@ -35,5 +36,6 @@ __all__ = [
     "Mamba2",
     "RetNet",
     "S4D",
+    "SHM",
     "mLSTM",
 ]

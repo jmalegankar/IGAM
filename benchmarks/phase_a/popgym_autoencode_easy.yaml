@@ -1,0 +1,53 @@
+# POPGym Autoencode-Easy — Tier 1 pure-recall benchmark.
+#
+# Task structure (the canonical recall benchmark):
+#   Episodes are 103 steps. The agent observes a sequence of (phase, token)
+#   pairs in two phases:
+#     - WATCH phase: observe tokens, output is ignored
+#     - RECALL phase: must output the tokens in the same order
+#   Obs space is Tuple(Discrete(2), Discrete(4)) (phase, token). Our
+#   FlattenTupleDiscrete wrapper auto-flattens to Discrete(8).
+#
+# Why this is the right task for matrix-memory cells:
+#   Pure recall — store an arbitrary sequence and replay it. LSTM/GRU's
+#   vector cell state has to compress the entire WATCH sequence into a
+#   bottleneck. Matrix-memory cells (DeltaNet/Gated DeltaNet/Mamba2)
+#   can store key-value associations explicitly. If IGAM doesn't win
+#   on Autoencode, the matrix-memory thesis is in trouble.
+#
+# Published baselines (POPGym paper, 15M-step budget):
+#   GRU ~0.4-0.5, LSTM similar, Transformer-XL worse.
+#   Our 3M budget at smaller state should land in 0.2-0.4 for the
+#   stronger cells.
+
+env_name: popgym-AutoencodeEasy-v0
+n_envs: 8
+total_timesteps: 3_000_000
+seed: 0
+
+cell:
+  name: IGAM
+  kwargs:
+    n_heads: 4
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 3.0e-4
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+# TBPTT chunking — 32 chosen to span ~30% of the 103-step episode.
+# At chunk_len=16, the WATCH→RECALL phase transition often falls
+# mid-chunk and the gradient path to early WATCH tokens is short.
+# chunk_len=32 with n_chunks_per_batch=8 keeps minibatch transitions
+# at 256, matching the Hard config.
+chunk_len: 32
+n_chunks_per_batch: 8
