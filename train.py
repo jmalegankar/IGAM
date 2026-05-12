@@ -82,6 +82,23 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "IGAM": GatedDeltaNet,
 }
 
+# Per-cell default kwargs used when --cell is overridden via CLI.
+# Keep these in sync with the cell signatures.
+# `hidden_size` is set from cfg["encoder_dim"] automatically.
+DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
+    "GRU":               {},
+    "LSTM":              {},
+    "LMU":               {"memory_size": 32, "theta": 64.0},
+    "LinearTransformer": {"n_heads": 4},
+    "S4D":               {"d_state": 64},
+    "Mamba2":            {"n_heads": 4, "d_state": 64},
+    "DeltaNet":          {"n_heads": 4},
+    "RetNet":            {"n_heads": 4},
+    "mLSTM":             {"n_heads": 4},
+    "GatedDeltaNet":     {"n_heads": 4},
+    "IGAM":              {"n_heads": 4},
+}
+
 
 def make_cell_factory(cell_name: str, cell_kwargs: dict[str, Any], hidden_size: int):
     """Closure that produces (input_size) -> RecurrentCell.
@@ -144,6 +161,10 @@ def main() -> None:
         "--total-timesteps", type=int, default=None,
         help="override config total_timesteps",
     )
+    parser.add_argument(
+        "--cell", default=None,
+        help="override config cell.name (must be a key in CELL_REGISTRY)",
+    )
     parser.add_argument("--runs-dir", default="runs", help="root dir for run outputs")
     args = parser.parse_args()
 
@@ -154,6 +175,16 @@ def main() -> None:
         cfg["seed"] = args.seed
     if args.total_timesteps is not None:
         cfg["total_timesteps"] = args.total_timesteps
+    if args.cell is not None:
+        if args.cell not in CELL_REGISTRY:
+            raise ValueError(
+                f"Unknown --cell {args.cell!r}. Available: {sorted(CELL_REGISTRY)}"
+            )
+        cfg["cell"]["name"] = args.cell
+        # When the user overrides the cell, replace the cell.kwargs with this
+        # cell's defaults — the YAML's kwargs are for the YAML's cell, not
+        # the override.
+        cfg["cell"]["kwargs"] = DEFAULT_CELL_KWARGS[args.cell].copy()
 
     run_dir = make_run_dir(args.config, cfg, args.runs_dir)
     print(f"Run dir: {run_dir}")
@@ -170,10 +201,19 @@ def main() -> None:
         hidden_size=cfg["encoder_dim"],   # cell hidden_size == encoder_dim by default
     )
 
+    # Optional linear LR decay (Engstrom et al. 2020; standard PPO trick).
+    # SB3 PPO accepts a Schedule (callable: progress_remaining → lr).
+    lr_cfg = cfg["lr"]
+    if cfg.get("linear_lr_decay", False):
+        initial_lr = float(lr_cfg)
+        lr_arg = lambda progress_remaining: initial_lr * progress_remaining  # noqa: E731
+    else:
+        lr_arg = lr_cfg
+
     model = IGAMPPO(
         env=env,
         cell_factory=factory,
-        lr=cfg["lr"],
+        lr=lr_arg,
         n_steps=cfg["n_steps"],
         n_epochs=cfg["n_epochs"],
         gamma=cfg.get("gamma", 0.99),
@@ -185,6 +225,7 @@ def main() -> None:
         target_kl=cfg.get("target_kl"),
         encoder_dim=cfg["encoder_dim"],
         encoder_hidden=cfg.get("encoder_hidden", 128),
+        shared_backbones=cfg.get("shared_backbones", False),   # default = Option A
         chunk_len=cfg["chunk_len"],
         n_chunks_per_batch=cfg["n_chunks_per_batch"],
         tensorboard_log=str(run_dir),

@@ -78,6 +78,7 @@ class IGAMPPO(PPO):
         target_kl: Optional[float] = None,
         encoder_dim: int = 64,
         encoder_hidden: int = 128,
+        shared_backbones: bool = False,
         chunk_len: int = 16,
         n_chunks_per_batch: int = 16,
         tensorboard_log: Optional[str] = None,
@@ -89,6 +90,7 @@ class IGAMPPO(PPO):
         self.cell_factory = cell_factory
         self.encoder_dim = encoder_dim
         self.encoder_hidden = encoder_hidden
+        self.shared_backbones = shared_backbones
         self.chunk_len = chunk_len
         self.n_chunks_per_batch = n_chunks_per_batch
 
@@ -128,26 +130,37 @@ class IGAMPPO(PPO):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        # Construct the cell BEFORE the policy/buffer so we can read its
-        # state shapes for the buffer.
-        cell = self.cell_factory(self.encoder_dim).to(self.device)
-
-        # Discover state shapes from the cell. init_state(batch_size=1)
-        # gives (1, *state_shape) per key; the rollout buffer allocates
-        # (T, n_envs, *state_shape).
-        with th.no_grad():
-            sample_state = cell.init_state(batch_size=1, device=th.device("cpu"))
-            state_shapes = {k: tuple(v.shape[1:]) for k, v in sample_state.items()}
+        # Cell construction depends on backbone mode:
+        # - shared_backbones=True (Option B+): one cell, both actor and critic
+        #   use it; critic input is detached at the head. 1× compute.
+        # - shared_backbones=False (Option A): two cells with independent
+        #   weights (Ni 2022 — separate backbones prevent critic gradient
+        #   dominance). 2× compute, slightly better late-game ceiling.
+        cell_actor = self.cell_factory(self.encoder_dim).to(self.device)
+        if self.shared_backbones:
+            cell_critic = None
+        else:
+            cell_critic = self.cell_factory(self.encoder_dim).to(self.device)
 
         self.policy = IGAMActorCriticPolicy(
             observation_space=self.observation_space,
             action_space=self.action_space,
-            cell=cell,
+            cell_actor=cell_actor,
+            cell_critic=cell_critic,
             encoder_dim=self.encoder_dim,
             encoder_hidden=self.encoder_hidden,
             lr=self.learning_rate if isinstance(self.learning_rate, float)
                else self.learning_rate(1.0),
+            shared_backbones=self.shared_backbones,
         ).to(self.device)
+
+        # State shape discovery: the policy's initial_state returns a
+        # namespaced dict (actor_* + critic_*). The buffer sees a flat
+        # dict and allocates arrays for every key — no special handling
+        # for the actor/critic split.
+        with th.no_grad():
+            sample_state = self.policy.initial_state(1, th.device("cpu"))
+            state_shapes = {k: tuple(v.shape[1:]) for k, v in sample_state.items()}
 
         self.rollout_buffer = IGAMRolloutBuffer(
             buffer_size=self.n_steps,
@@ -183,10 +196,11 @@ class IGAMPPO(PPO):
         )
         self._cell_state = self.policy.initial_state(self.n_envs, self.device)
         if self.verbose >= 1:
-            cell_name = type(self.policy.cell).__name__
+            cell_name = type(self.policy.cell_actor).__name__
             n_params = sum(p.numel() for p in self.policy.parameters())
-            print(f"  cell={cell_name}  params={n_params:,}  "
-                  f"chunk_len={self.chunk_len}  n_chunks_per_batch={self.n_chunks_per_batch}")
+            print(f"  cell={cell_name} (×2: separate actor/critic backbones)  "
+                  f"params={n_params:,}  chunk_len={self.chunk_len}  "
+                  f"n_chunks_per_batch={self.n_chunks_per_batch}")
             print(f"  cell state shapes: " + ", ".join(
                 f"{k}={tuple(v.shape[1:])}" for k, v in self._cell_state.items()
             ))
@@ -420,13 +434,17 @@ class IGAMPPO(PPO):
                 loss.backward()
 
                 # Per-component grad-norm logging (README discipline).
-                # Clip per component to max_grad_norm.
+                # Clip per component to max_grad_norm. Two cells now —
+                # log them separately so we can see if the critic's
+                # cell drifts differently from the actor's.
                 per_comp_max = 0.0
                 for name, mod in [
-                    ("encoder", self.policy.encoder),
-                    ("cell",    self.policy.cell),
-                    ("actor",   self.policy.actor),
-                    ("critic",  self.policy.critic),
+                    ("encoder_actor",  self.policy.encoder_actor),
+                    ("encoder_critic", self.policy.encoder_critic),
+                    ("cell_actor",     self.policy.cell_actor),
+                    ("cell_critic",    self.policy.cell_critic),
+                    ("actor",          self.policy.actor),
+                    ("critic",         self.policy.critic),
                 ]:
                     norm = th.nn.utils.clip_grad_norm_(
                         mod.parameters(), self.max_grad_norm,

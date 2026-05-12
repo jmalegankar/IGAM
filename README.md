@@ -76,6 +76,30 @@ The PPO trainer (`igam/ppo/igam_ppo.py`) is generic over any cell in `igam.cell`
 ```bash
 # Tier 1 canary — IGAM on POPGym-RepeatPrevious-Easy, 1M steps
 .venv/bin/python train.py --config benchmarks/phase_a/popgym_repeat_previous_easy.yaml --seed 0
+
+# Override the cell via CLI (uses sensible per-cell defaults from train.py::DEFAULT_CELL_KWARGS)
+.venv/bin/python train.py --config <path> --cell LSTM --seed 0
+
+# Sweep multiple cells in parallel on the same task (4 cells, OMP_NUM_THREADS=2 each)
+bash scripts/run_tier1_parallel.sh
+# or sequential (for low-CPU machines):
+bash scripts/run_tier1.sh
+# Override task / seed / cells:
+CONFIG=benchmarks/phase_a/popgym_repeat_previous_hard.yaml SEED=1 \
+  CELLS="LSTM IGAM" bash scripts/run_tier1_parallel.sh
+```
+
+### Setup on a fresh machine
+
+```bash
+git clone https://github.com/jmalegankar/IGAM.git && cd IGAM
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -e . pytest pytest-xdist
+# If on CUDA, prefer torch with CUDA wheels:
+# pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision
+pytest igam/cell/tests/                              # 180 fast tests should pass in ~5s
+.venv/bin/python train.py --config benchmarks/phase_a/popgym_repeat_previous_easy.yaml \
+  --total-timesteps 8192 --seed 0                    # ~30s smoke test
 ```
 
 Each run writes to `runs/<benchmark>/<cell>/seed_<n>_<timestamp>/`:
