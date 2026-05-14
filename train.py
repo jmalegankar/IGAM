@@ -56,6 +56,7 @@ from igam.cell import (
     SHM,
     DeltaNet,
     GatedDeltaNet,
+    GatedLMU,
     LinearTransformer,
     Mamba2,
     RecurrentCell,
@@ -79,6 +80,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "RetNet": RetNet,
     "mLSTM": mLSTM,
     "GatedDeltaNet": GatedDeltaNet,
+    "GatedLMU": GatedLMU,
     "SHM": SHM,
     # IGAM is an alias for GatedDeltaNet (the cell IS the IGAM cell).
     "IGAM": GatedDeltaNet,
@@ -98,6 +100,7 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "RetNet":            {"n_heads": 4},
     "mLSTM":             {"n_heads": 4},
     "GatedDeltaNet":     {"n_heads": 4},
+    "GatedLMU":          {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum"},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
     "IGAM":              {"n_heads": 4},
 }
@@ -168,6 +171,10 @@ def main() -> None:
         "--cell", default=None,
         help="override config cell.name (must be a key in CELL_REGISTRY)",
     )
+    parser.add_argument(
+        "--theta", type=float, default=None,
+        help="override LMU/GatedLMU theta hyperparameter (no effect on other cells)",
+    )
     parser.add_argument("--runs-dir", default="runs", help="root dir for run outputs")
     args = parser.parse_args()
 
@@ -188,6 +195,15 @@ def main() -> None:
         # cell's defaults — the YAML's kwargs are for the YAML's cell, not
         # the override.
         cfg["cell"]["kwargs"] = DEFAULT_CELL_KWARGS[args.cell].copy()
+    if args.theta is not None:
+        # Apply theta override (LMU/GatedLMU). Silently no-op for cells
+        # that don't accept theta in their kwargs.
+        if "theta" in cfg["cell"].get("kwargs", {}):
+            cfg["cell"]["kwargs"]["theta"] = args.theta
+        else:
+            # Cell doesn't take theta — warn but don't crash so the same
+            # launcher script can be reused across cells.
+            print(f"  [warn] --theta {args.theta} ignored: {cfg['cell']['name']} doesn't accept theta")
 
     run_dir = make_run_dir(args.config, cfg, args.runs_dir)
     print(f"Run dir: {run_dir}")

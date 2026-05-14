@@ -1,0 +1,41 @@
+# POPGym RepeatPrevious-Medium — mid-difficulty differentiation benchmark.
+#
+# vs Easy (51-step episodes, K=4 lookback) and Hard (155-step, K=16+ lookback):
+#   - Medium episode = 103 steps, K=8 lookback (roughly)
+#   - Right between Easy (LSTM solves trivially) and Hard (matrix memory's
+#     advantage shows). Useful for tracing the difficulty curve.
+#
+# Budget: 15M aligned with POPGym paper. For quick iteration override
+# with `--total-timesteps N`.
+
+env_name: popgym-RepeatPreviousMedium-v0
+n_envs: 8
+
+total_timesteps: 15_000_000
+
+seed: 0
+
+cell:
+  name: IGAM
+  kwargs:
+    n_heads: 4
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 3.0e-4
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+# Medium episodes (~103 steps) benefit from longer BPTT chunks for
+# credit assignment across the recall horizon. Note: chunk_len must
+# divide n_steps (1024); chunk_len=32 gives 8 chunks/env/rollout.
+chunk_len: 32
+n_chunks_per_batch: 8
