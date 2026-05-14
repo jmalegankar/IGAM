@@ -28,6 +28,7 @@ from igam.cell import (
     DeltaNet,
     GatedDeltaNet,
     GatedLMU,
+    SelectiveLMU,
     LinearTransformer,
     Mamba2,
     RecurrentCell,
@@ -52,6 +53,8 @@ CELL_FACTORIES: dict[str, Callable[[int, int], RecurrentCell]] = {
     "GatedDeltaNet":     lambda i, h: GatedDeltaNet(i, h, n_heads=2),
     "SHM":               lambda i, h: SHM(i, h, L=32),  # smaller L for fast tests
     "GatedLMU":          lambda i, h: GatedLMU(i, h, memory_size=8, theta=64.0),
+    # SelectiveLMU: K=3 multi-scale, all extensions on. Small mem/theta for fast tests.
+    "SelectiveLMU":      lambda i, h: SelectiveLMU(i, h, memory_size=8, theta=64.0, n_scales=3),
 }
 
 

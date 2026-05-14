@@ -62,6 +62,7 @@ from igam.cell import (
     RecurrentCell,
     RetNet,
     S4D,
+    SelectiveLMU,
     mLSTM,
 )
 from igam.envs import make_popgym_vec_env
@@ -81,6 +82,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "mLSTM": mLSTM,
     "GatedDeltaNet": GatedDeltaNet,
     "GatedLMU": GatedLMU,
+    "SelectiveLMU": SelectiveLMU,
     "SHM": SHM,
     # IGAM is an alias for GatedDeltaNet (the cell IS the IGAM cell).
     "IGAM": GatedDeltaNet,
@@ -101,6 +103,8 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "mLSTM":             {"n_heads": 4},
     "GatedDeltaNet":     {"n_heads": 4},
     "GatedLMU":          {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum"},
+    "SelectiveLMU":      {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum",
+                          "n_scales": 3, "scale_factor": 2.0, "readout_skip_scale": 0.1},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
     "IGAM":              {"n_heads": 4},
 }

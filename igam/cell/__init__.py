@@ -9,7 +9,7 @@ from .base import (
 )
 from .deltanet import DeltaNet
 from .gated_deltanet import GatedDeltaNet
-from .gated_lmu import GatedLMU
+from .gated_lmu import GatedLMU, SelectiveLMU
 from .gru import GRU
 from .linear_transformer import LinearTransformer
 from .lmu import LMU
@@ -31,6 +31,7 @@ __all__ = [
     "DeltaNet",
     "GatedDeltaNet",
     "GatedLMU",
+    "SelectiveLMU",
     "GRU",
     "LMU",
     "LSTM",
