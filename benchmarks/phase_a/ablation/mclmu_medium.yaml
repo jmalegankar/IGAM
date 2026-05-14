@@ -1,0 +1,47 @@
+# Row 1 of the ADR 0005 ablation: Multichannel LMU on Medium.
+#
+# The bare-minimum extension over canonical LMU (Voelker 2019): multichannel
+# u (the encoder produces a C-dim vector, not a scalar). Everything else off.
+#
+# Compare to:
+#   - LMU Medium (vanilla)             → arrow 0→1: multichannel's contribution
+#   - MSLMU Medium (+ multi-scale)     → arrow 1→2: multi-scale's contribution
+#   - GatedLMU thesis (+ write gate)   → arrow 1→3: write gate's contribution
+
+env_name: popgym-RepeatPreviousMedium-v0
+n_envs: 8
+
+total_timesteps: 5_000_000
+
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 64
+    theta: 200.0
+    gate_type: none
+    n_scales: 1                   # single scale = no multi-scale
+    layer_norm: false             # no freebies — minimum extension only
+    readout_skip_scale: 0.0
+    orthogonal_W_pre: false
+    salience_gate: false
+    hadamard_calib: false
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 1.0e-4
+target_kl: 0.02
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8

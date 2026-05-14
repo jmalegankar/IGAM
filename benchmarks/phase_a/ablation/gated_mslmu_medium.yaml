@@ -1,0 +1,48 @@
+# Row 4 of the ADR 0005 ablation: Gated Multi-scale LMU on Medium.
+#
+# Everything SelectiveLMU has EXCEPT the salience gate. The "is salience
+# pulling its weight?" test.
+#
+# Compare to:
+#   - SelectiveLMU Medium (+ salience)   → arrow 4→5: salience's contribution
+#   - MSLMU Medium (no write gate)       → arrow 2→4: write gate's contribution given MS
+#   - GatedLMU thesis (no MS, no LN)     → arrow 3→4: multi-scale's contribution given gate
+
+env_name: popgym-RepeatPreviousMedium-v0
+n_envs: 8
+
+total_timesteps: 5_000_000
+
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 64
+    theta: 200.0
+    gate_type: softsign_sum       # write gate ON
+    n_scales: 3
+    scale_factor: 2.0
+    layer_norm: true
+    readout_skip_scale: 0.1
+    orthogonal_W_pre: true
+    salience_gate: false          # ← the key ablation: no salience
+    hadamard_calib: false
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 1.0e-4
+target_kl: 0.02
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8
