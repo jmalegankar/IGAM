@@ -65,7 +65,7 @@ from igam.cell import (
     SelectiveLMU,
     mLSTM,
 )
-from igam.envs import make_popgym_vec_env
+from igam.envs import make_vec_env
 from igam.ppo import IGAMPPO
 
 
@@ -212,7 +212,7 @@ def main() -> None:
     run_dir = make_run_dir(args.config, cfg, args.runs_dir)
     print(f"Run dir: {run_dir}")
 
-    env = make_popgym_vec_env(
+    env = make_vec_env(
         env_name=cfg["env_name"],
         n_envs=cfg["n_envs"],
         seed=cfg["seed"],
@@ -261,7 +261,7 @@ def main() -> None:
     # runs eval once per ~`cfg["eval_every_rollouts"]` rollouts. Default: every
     # rollout. Eval env is seeded differently from training so we measure
     # generalization, not memorization.
-    eval_env = make_popgym_vec_env(
+    eval_env = make_vec_env(
         env_name=cfg["env_name"],
         n_envs=1,
         seed=cfg["seed"] + 10_000,
