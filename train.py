@@ -55,13 +55,11 @@ from memrl.cell import (
     LSTM,
     SHM,
     DeltaNet,
-    GatedLMU,
     LinearTransformer,
     Mamba2,
     RecurrentCell,
     RetNet,
     S4D,
-    SelectiveLMU,
     mLSTM,
 )
 from memrl.envs import make_vec_env
@@ -79,8 +77,6 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "DeltaNet": DeltaNet,
     "RetNet": RetNet,
     "mLSTM": mLSTM,
-    "GatedLMU": GatedLMU,
-    "SelectiveLMU": SelectiveLMU,
     "SHM": SHM,
 }
 
@@ -97,9 +93,6 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "DeltaNet":          {"n_heads": 4},
     "RetNet":            {"n_heads": 4},
     "mLSTM":             {"n_heads": 4},
-    "GatedLMU":          {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum"},
-    "SelectiveLMU":      {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum",
-                          "n_scales": 3, "scale_factor": 2.0, "readout_skip_scale": 0.1},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
 }
 
@@ -171,7 +164,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--theta", type=float, default=None,
-        help="override LMU/GatedLMU theta hyperparameter (no effect on other cells)",
+        help="override LMU theta hyperparameter (no effect on other cells)",
     )
     parser.add_argument("--runs-dir", default="runs", help="root dir for run outputs")
     args = parser.parse_args()
@@ -194,7 +187,7 @@ def main() -> None:
         # the override.
         cfg["cell"]["kwargs"] = DEFAULT_CELL_KWARGS[args.cell].copy()
     if args.theta is not None:
-        # Apply theta override (LMU/GatedLMU). Silently no-op for cells
+        # Apply theta override (LMU). Silently no-op for cells
         # that don't accept theta in their kwargs.
         if "theta" in cfg["cell"].get("kwargs", {}):
             cfg["cell"]["kwargs"]["theta"] = args.theta
