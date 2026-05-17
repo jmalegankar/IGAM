@@ -55,7 +55,6 @@ from igam.cell import (
     LSTM,
     SHM,
     DeltaNet,
-    GatedDeltaNet,
     GatedLMU,
     LinearTransformer,
     Mamba2,
@@ -80,12 +79,9 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "DeltaNet": DeltaNet,
     "RetNet": RetNet,
     "mLSTM": mLSTM,
-    "GatedDeltaNet": GatedDeltaNet,
     "GatedLMU": GatedLMU,
     "SelectiveLMU": SelectiveLMU,
     "SHM": SHM,
-    # IGAM is an alias for GatedDeltaNet (the cell IS the IGAM cell).
-    "IGAM": GatedDeltaNet,
 }
 
 # Per-cell default kwargs used when --cell is overridden via CLI.
@@ -101,12 +97,10 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "DeltaNet":          {"n_heads": 4},
     "RetNet":            {"n_heads": 4},
     "mLSTM":             {"n_heads": 4},
-    "GatedDeltaNet":     {"n_heads": 4},
     "GatedLMU":          {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum"},
     "SelectiveLMU":      {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum",
                           "n_scales": 3, "scale_factor": 2.0, "readout_skip_scale": 0.1},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
-    "IGAM":              {"n_heads": 4},
 }
 
 

@@ -99,13 +99,6 @@ MQAR_THRESHOLDS = {
     "RetNet":            0.30,
     "DeltaNet":          0.25,
     "mLSTM":             0.25,
-    # GatedDeltaNet (IGAM headline). At test-scale (hidden=16, 1000 steps) the
-    # α-decay gate adds parameters and an active forgetting mechanism that can
-    # HURT before the cell sees enough updates to learn α. Empirically lands
-    # at ~0.23 here — below DeltaNet (~0.32). Threshold reflects this: the
-    # *real* IGAM-vs-DeltaNet comparison is Phase A POPGym at hidden=128+,
-    # where the extra capacity should pay off.
-    "GatedDeltaNet":     0.20,
 }
 
 
