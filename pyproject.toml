@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "igam"
+name = "memrl"
 version = "0.1.0"
 description = "Recurrent / SSM memory cells and partially-observable RL environment wrappers under a common interface."
 readme = "README.md"
@@ -33,10 +33,10 @@ popgym-arcade = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["igam*"]
+include = ["memrl*"]
 
 [tool.pytest.ini_options]
-testpaths = ["igam"]
+testpaths = ["memrl"]
 python_files = ["test_*.py"]
 markers = [
     "slow: full-training tests gated behind -m slow (deselected by default)",

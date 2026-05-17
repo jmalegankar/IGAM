@@ -12,8 +12,8 @@ decay), RetNet completes the three-way ablation:
     no decay  →  fixed multi-scale decay  →  selective per-step decay
     LinTrans  →  RetNet                   →  Mamba-2
 
-For IGAM specifically, RetNet isolates the question: *does the data-
-dependent decay α_t in IGAM contribute beyond what a well-chosen fixed
+For GatedDeltaNet specifically, RetNet isolates the question: *does the data-
+dependent decay α_t in GatedDeltaNet contribute beyond what a well-chosen fixed
 schedule provides?*
 
 Math (per step, per head h):
@@ -80,7 +80,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class RetNet(RecurrentCell):

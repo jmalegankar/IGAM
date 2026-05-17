@@ -87,7 +87,7 @@ def make_popgym_vec_env(
         seed:     base seed; env i is seeded with `seed + i`.
 
     Returns:
-        Vectorized environment ready to pass to IGAMPPO.
+        Vectorized environment ready to pass to MemPPO.
     """
     def _make_one(rank: int):
         def _init():

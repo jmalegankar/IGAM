@@ -51,7 +51,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class GRU(RecurrentCell):

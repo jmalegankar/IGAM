@@ -1,7 +1,7 @@
 """Shared pytest fixtures for cell tests.
 
 Provides:
-- `device` — CPU by default; override via env var `IGAM_TEST_DEVICE=cuda`.
+- `device` — CPU by default; override via env var `MEMRL_TEST_DEVICE=cuda`.
 - `seed_all` — autouse fixture that seeds torch/random/numpy deterministically.
 - `cell_name_and_factory` — parametrized fixture yielding (name, factory)
   pairs for every cell registered in `CELL_FACTORIES`. New cells slot in here.
@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 import torch
 
-from igam.cell import (
+from memrl.cell import (
     GRU,
     LMU,
     LSTM,
@@ -58,8 +58,8 @@ CELL_FACTORIES: dict[str, Callable[[int, int], RecurrentCell]] = {
 
 @pytest.fixture
 def device() -> torch.device:
-    """Test device. CPU by default; override via IGAM_TEST_DEVICE env var."""
-    env_device = os.environ.get("IGAM_TEST_DEVICE")
+    """Test device. CPU by default; override via MEMRL_TEST_DEVICE env var."""
+    env_device = os.environ.get("MEMRL_TEST_DEVICE")
     if env_device:
         return torch.device(env_device)
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")

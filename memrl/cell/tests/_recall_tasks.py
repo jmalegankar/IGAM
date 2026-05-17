@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell
+from memrl.cell.base import RecurrentCell
 
 
 # Sentinel for "ignore" positions in cross-entropy loss.

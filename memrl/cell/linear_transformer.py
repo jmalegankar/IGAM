@@ -7,7 +7,7 @@ The simplest matrix-memory linear-attention cell. Serves as the lower-bound
 ablation for the Gated DeltaNet family in the Phase A baseline table:
 strip away gating (α_t, β_t), strip away the delta rule, strip away the
 dynamic query — what's left is outer-product accumulation with a kernel
-feature map. If IGAM can't beat this, every component IGAM adds is
+feature map. If GatedDeltaNet can't beat this, every component GatedDeltaNet adds is
 making the model strictly worse than the simplest matrix-memory cell.
 
 Math (per step, per head h):
@@ -78,7 +78,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class LinearTransformer(RecurrentCell):

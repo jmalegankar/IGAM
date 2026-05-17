@@ -17,7 +17,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from igam.cell import apply_episode_mask, detach_state
+from memrl.cell import apply_episode_mask, detach_state
 
 
 # Test config — kept small for speed; the contract tests don't need big sizes.

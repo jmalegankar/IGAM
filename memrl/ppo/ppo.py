@@ -1,30 +1,20 @@
-"""IGAM PPO trainer.
+"""Memory-cell PPO trainer.
 
 PPO with a generic recurrent policy + TBPTT-chunked rollout buffer.
 Cell-agnostic: works with any `RecurrentCell` (GRU, LSTM, LMU, S4D, Mamba2,
-LinearTransformer, RetNet, DeltaNet, mLSTM, GatedDeltaNet).
+LinearTransformer, RetNet, DeltaNet, mLSTM, ...).
 
-Architectural ancestor: `lmu_ppo/lmu_ppo.py::LMUPPO`. We strip the LMU-
-specifics:
-  - No W_pre OrthoLayer / Cayley updates (no IGAM cell has W_pre)
-  - No LegS step counter
-  - No E3B episodic bonus (Phase B work)
-  - No phi_source variants (Phase B work)
-  - No MiniGrid-specific diagnostics
-  - No gate/innov/u_x unpacking from cell.forward
-
-We keep:
+Logging:
   - Chunked TBPTT (chunk_len, n_chunks_per_batch)
-  - Per-component grad-norm logging (README discipline)
+  - Per-component grad-norm logging
   - State-norm logging per cell-state component
-  - Innovation magnitude logging (when the cell emits one — DeltaNet, IGAM)
+  - Innovation magnitude logging (when the cell emits one — DeltaNet, etc.)
   - SB3 PPO scaffolding (callbacks, schedules, env wrappers, eval)
 
-For Phase B (exploration), the lifelong intrinsic reward r_life = ‖δ_t‖²
-hooks into this loop by reading `side_outputs["innovation"]` during
-`collect_rollouts` and adding `β · r_life · (1 - episode_start)` to the
-reward. Stub left in the diagnostic logging today; full Phase B reward
-wiring is a separate ADR.
+Cells emit a `SideOutputs` dict from `step` for things like per-step
+innovation signals; this loop forwards them through `collect_rollouts`
+so downstream training code (e.g., lifelong intrinsic rewards on the
+research branches) can read them.
 """
 
 from __future__ import annotations
@@ -44,9 +34,9 @@ from stable_baselines3.common.utils import (
     obs_as_tensor,
 )
 
-from igam.cell.base import RecurrentCell
-from igam.policy.buffer import IGAMRolloutBuffer
-from igam.policy.igam_policy import IGAMActorCriticPolicy
+from memrl.cell.base import RecurrentCell
+from memrl.policy.buffer import MemRolloutBuffer
+from memrl.policy.policy import MemActorCriticPolicy
 
 
 # A cell factory takes (input_size) and returns a constructed RecurrentCell.
@@ -54,11 +44,11 @@ from igam.policy.igam_policy import IGAMActorCriticPolicy
 CellFactory = Callable[[int], RecurrentCell]
 
 
-class IGAMPPO(PPO):
-    """PPO with an IGAM recurrent policy and TBPTT rollout buffer."""
+class MemPPO(PPO):
+    """PPO with a recurrent memory-cell policy and TBPTT rollout buffer."""
 
-    policy: IGAMActorCriticPolicy
-    rollout_buffer: IGAMRolloutBuffer
+    policy: MemActorCriticPolicy
+    rollout_buffer: MemRolloutBuffer
 
     def __init__(
         self,
@@ -142,7 +132,7 @@ class IGAMPPO(PPO):
         else:
             cell_critic = self.cell_factory(self.encoder_dim).to(self.device)
 
-        self.policy = IGAMActorCriticPolicy(
+        self.policy = MemActorCriticPolicy(
             observation_space=self.observation_space,
             action_space=self.action_space,
             cell_actor=cell_actor,
@@ -162,7 +152,7 @@ class IGAMPPO(PPO):
             sample_state = self.policy.initial_state(1, th.device("cpu"))
             state_shapes = {k: tuple(v.shape[1:]) for k, v in sample_state.items()}
 
-        self.rollout_buffer = IGAMRolloutBuffer(
+        self.rollout_buffer = MemRolloutBuffer(
             buffer_size=self.n_steps,
             observation_space=self.observation_space,
             action_space=self.action_space,
@@ -187,7 +177,7 @@ class IGAMPPO(PPO):
         total_timesteps: int,
         callback=None,
         reset_num_timesteps: bool = True,
-        tb_log_name: str = "igam_ppo",
+        tb_log_name: str = "ppo",
         progress_bar: bool = False,
     ):
         ret = super()._setup_learn(

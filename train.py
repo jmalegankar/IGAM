@@ -1,4 +1,4 @@
-"""Train an IGAM cell on a POPGym task (or any registered gym env).
+"""Train a recurrent memory cell on a POPGym task (or any registered gym env).
 
 Usage:
     python train.py --config benchmarks/phase_a/popgym_repeat_previous_easy.yaml
@@ -18,7 +18,7 @@ YAML schema:
     seed:              int    — base seed (env i seeded with seed + i)
 
     cell:
-        name:          string — one of CELL_REGISTRY keys (GRU, IGAM, …)
+        name:          string — one of CELL_REGISTRY keys (GRU, LSTM, …)
         kwargs:        dict   — passed to the cell's __init__
 
     encoder_dim:       int
@@ -49,7 +49,7 @@ from typing import Any
 import yaml
 from stable_baselines3.common.callbacks import EvalCallback
 
-from igam.cell import (
+from memrl.cell import (
     GRU,
     LMU,
     LSTM,
@@ -64,11 +64,11 @@ from igam.cell import (
     SelectiveLMU,
     mLSTM,
 )
-from igam.envs import make_vec_env
-from igam.ppo import IGAMPPO
+from memrl.envs import make_vec_env
+from memrl.ppo import MemPPO
 
 
-# Cell registry — keep in sync with `igam.cell.__init__.__all__`.
+# Cell registry — keep in sync with `memrl.cell.__init__.__all__`.
 CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "GRU": GRU,
     "LSTM": LSTM,
@@ -227,7 +227,7 @@ def main() -> None:
     else:
         lr_arg = lr_cfg
 
-    model = IGAMPPO(
+    model = MemPPO(
         env=env,
         cell_factory=factory,
         lr=lr_arg,

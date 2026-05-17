@@ -1,7 +1,7 @@
-"""TBPTT rollout buffer for IGAM.
+"""TBPTT rollout buffer.
 
 Generic over `RecurrentCell` — works with any cell satisfying the
-`igam.cell.base.RecurrentCell` interface. Cell state shapes are discovered
+`memrl.cell.base.RecurrentCell` interface. Cell state shapes are discovered
 at construction time via `cell.init_state(batch_size=1)`, so adding a
 new cell to the codebase doesn't require touching the buffer.
 
@@ -40,7 +40,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 CellStateDict = dict[str, th.Tensor]
 
 
-class IGAMRolloutBufferSamples(NamedTuple):
+class MemRolloutBufferSamples(NamedTuple):
     observations:   th.Tensor              # (B, K, *obs_shape)
     actions:        th.Tensor              # (B, K)  long (Discrete) / (B, K, action_dim) float
     old_values:     th.Tensor              # (B*K,)
@@ -51,7 +51,7 @@ class IGAMRolloutBufferSamples(NamedTuple):
     episode_starts: th.Tensor              # (B, K) float32  1.0 = new episode at this step
 
 
-class IGAMRolloutBuffer(RolloutBuffer):
+class MemRolloutBuffer(RolloutBuffer):
     """RolloutBuffer extended with per-step cell-state storage and chunk-based get().
 
     State storage is dict-typed: every key returned by the cell's
@@ -120,7 +120,7 @@ class IGAMRolloutBuffer(RolloutBuffer):
     def get(  # type: ignore[override]
         self,
         n_chunks: Optional[int] = None,
-    ) -> Generator[IGAMRolloutBufferSamples, None, None]:
+    ) -> Generator[MemRolloutBufferSamples, None, None]:
         """Yield batches of K-step sequence chunks for TBPTT.
 
         Args:
@@ -152,7 +152,7 @@ class IGAMRolloutBuffer(RolloutBuffer):
         self,
         chunks: list[tuple[int, int]],
         env: Optional[VecNormalize] = None,
-    ) -> IGAMRolloutBufferSamples:
+    ) -> MemRolloutBufferSamples:
         K = self.chunk_len
         B = len(chunks)
 
@@ -190,7 +190,7 @@ class IGAMRolloutBuffer(RolloutBuffer):
         else:
             actions_out = actions                                          # (B, K, action_dim)
 
-        return IGAMRolloutBufferSamples(
+        return MemRolloutBufferSamples(
             observations=obs,
             actions=actions_out,
             old_values=old_vals.reshape(B * K),

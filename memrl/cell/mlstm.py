@@ -19,19 +19,19 @@ distinguish it from standard LSTM and from LinearTransformer:
      stabilization, the EFFECTIVE gates are in (0, 1] but their RATIO
      encodes the unbounded amplification.
 
-Why mLSTM for the IGAM ablation table:
+Why mLSTM for the GatedDeltaNet ablation table:
   Direct competitor in the "gated matrix memory" lane. Same matrix-memory
-  commitment as IGAM (Gated DeltaNet), but using LSTM-style gating
+  commitment as GatedDeltaNet (Gated DeltaNet), but using LSTM-style gating
   instead of the delta rule. The pairwise ablation:
 
       ┌────────────┬─────────────────┬─────────────────────┐
       │            │  No gating      │  Gated              │
       ├────────────┼─────────────────┼─────────────────────┤
       │ No delta   │ LinearTransformer│ mLSTM (LSTM-style)  │
-      │ Delta rule │ DeltaNet        │ IGAM (delta + α)    │
+      │ Delta rule │ DeltaNet        │ GatedDeltaNet (delta + α)    │
       └────────────┴─────────────────┴─────────────────────┘
 
-  IGAM and mLSTM are the two "gated matrix memory" cells. The Phase A
+  GatedDeltaNet and mLSTM are the two "gated matrix memory" cells. The Phase A
   comparison answers: "for gated matrix memory under PPO, does the delta
   rule beat LSTM-style exponential gating?"
 
@@ -101,7 +101,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class mLSTM(RecurrentCell):

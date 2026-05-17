@@ -27,7 +27,7 @@ mkdir -p /tmp/igam_ablation
 
 Verify it works:
 ```bash
-.venv/bin/python -c "from igam.cell import SelectiveLMU; print('ok')"
+.venv/bin/python -c "from memrl.cell import SelectiveLMU; print('ok')"
 ```
 Should print `ok`.
 

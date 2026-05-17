@@ -1,4 +1,4 @@
-"""Base interface for IGAM recurrent memory cells.
+"""Base interface for recurrent memory cells.
 
 Design contract (read this first):
 
@@ -42,7 +42,7 @@ from torch import Tensor, nn
 # Per-step cell state: dict from component name → tensor of shape (B, *).
 #   LSTM:           {"h": (B, H), "c": (B, H)}
 #   LMU:            {"h": (B, H), "m": (B, N)}
-#   GatedDeltaNet:  {"h": (B, H), "W": (B, n_heads, d_k, d_v), "n": (B, n_heads, d_k)}
+#   DeltaNet:       {"h": (B, H), "W": (B, n_heads, d_k, d_v), "n": (B, n_heads, d_k)}
 State = dict[str, Tensor]
 
 # Per-step diagnostic / auxiliary outputs from `step` (e.g. {"innovation": δ_t}),
@@ -58,7 +58,7 @@ StackedSideOutputs = dict[str, Tensor]
 
 
 class RecurrentCell(nn.Module, ABC):
-    """Abstract base for IGAM recurrent memory cells.
+    """Abstract base for recurrent memory cells.
 
     Subclasses must implement `init_state` and `step`. They may optionally
     override `reset_state` (for non-zero initial state) and `forward_sequence`
@@ -67,7 +67,7 @@ class RecurrentCell(nn.Module, ABC):
     Output dimension contract:
         `step` returns y of shape (B, output_size). If the cell's natural
         internal feature width differs from output_size (e.g., LMU with
-        hidden_size != output_size, or GatedDeltaNet with d_v*n_heads !=
+        hidden_size != output_size, or matrix-memory cells with d_v*n_heads !=
         output_size), the cell is responsible for adding its own output
         projection — typically an `nn.Linear(internal_dim, output_size)` in
         `__init__` and applied at the end of `step`. Consumer code (policy,

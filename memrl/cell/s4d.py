@@ -10,7 +10,7 @@ into N independent scalar SSMs per channel. This is the practical baseline
 that almost everyone uses today — the original full S4 (DPLR form) is rarely
 implemented directly anymore.
 
-Why S4D for the IGAM ablation table:
+Why S4D for the GatedDeltaNet ablation table:
   - Represents the "structured state-space" family in the Phase A baseline
     comparison (vs Linear Transformer / DeltaNet / Gated DeltaNet).
   - Uses HiPPO-LegS-derived initialization (S4D-Lin), which is the principled
@@ -97,7 +97,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 S4DInit = Literal["s4d-lin", "s4d-inv"]
@@ -164,7 +164,7 @@ class S4D(RecurrentCell):
         self.D = nn.Parameter(torch.randn(H))
 
         # Output mixing — simple linear + LN. Keeps the cell consistent with
-        # the rest of the IGAM cell family. No GLU / GELU here (those belong
+        # the rest of the GatedDeltaNet cell family. No GLU / GELU here (those belong
         # to the full S4D block; we're the SSM unit).
         self.output_linear = nn.Linear(H, H, bias=False)
         self.output_ln = nn.LayerNorm(H)

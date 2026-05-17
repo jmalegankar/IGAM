@@ -1,4 +1,4 @@
-"""IGAM actor-critic policy with SEPARATE actor and critic backbones.
+"""Actor-critic policy with SEPARATE actor and critic backbones.
 
 Per Ni et al. 2022 ("Recurrent Model-Free RL Can Be a Strong Baseline for
 Many POMDPs"), sharing a recurrent encoder between actor and critic causes
@@ -37,8 +37,8 @@ from gymnasium import spaces
 from torch import Tensor, nn
 from torch.distributions import Categorical
 
-from igam.cell.base import RecurrentCell
-from igam.policy.encoder import FlatEncoder
+from memrl.cell.base import RecurrentCell
+from memrl.policy.encoder import FlatEncoder
 
 
 ACTOR_PREFIX = "actor_"
@@ -67,7 +67,7 @@ def _merge_state(
     }
 
 
-class IGAMActorCriticPolicy(nn.Module):
+class MemActorCriticPolicy(nn.Module):
     """Actor-critic with separate recurrent backbones (Ni 2022 / SB3-RecurrentPPO default)."""
 
     def __init__(
@@ -94,7 +94,7 @@ class IGAMActorCriticPolicy(nn.Module):
         super().__init__()
         if not isinstance(action_space, spaces.Discrete):
             raise NotImplementedError(
-                "IGAMActorCriticPolicy currently supports Discrete action spaces only."
+                "MemActorCriticPolicy currently supports Discrete action spaces only."
             )
 
         self.shared_backbones = shared_backbones

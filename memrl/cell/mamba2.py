@@ -20,12 +20,12 @@ and from Linear Transformer:
      H = n_heads, N = d_state, P = d_head. Same shape family as
      LinearTransformer / Gated DeltaNet, but with selective dynamics.
 
-Why Mamba-2 specifically for the IGAM ablation table:
-  - "Selectivity" is conceptually identical to IGAM's data-dependent
+Why Mamba-2 specifically for the GatedDeltaNet ablation table:
+  - "Selectivity" is conceptually identical to GatedDeltaNet's data-dependent
     gates (α_t, β_t, dynamic query): both are input-dependent
     modulations of an otherwise-LTI recurrence.
   - Mamba-2 uses scalar A per head + selectivity to compete with
-    attention. IGAM uses matrix-memory state + delta rule + selectivity
+    attention. GatedDeltaNet uses matrix-memory state + delta rule + selectivity
     to compete with the same. Direct ablation: "what does the delta
     rule add to a selective matrix-memory cell?"
   - Per the README Phase A baseline list (Week 4–6 ablations).
@@ -91,7 +91,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class Mamba2(RecurrentCell):

@@ -7,18 +7,18 @@ Refined parameterization from Yang et al. 2024 (NeurIPS):
 "Parallelizing Linear Transformers with the Delta Rule over Sequence Length"
 https://arxiv.org/abs/2406.06484
 
-The direct precursor to IGAM (Gated DeltaNet). DeltaNet replaces the
+The direct precursor to GatedDeltaNet (Gated DeltaNet). DeltaNet replaces the
 Linear Transformer's pure outer-product accumulation with a delta-rule
 update that performs error-corrected key→value association. The Gated
-DeltaNet paper (Yang et al. 2024) — which IGAM extends — defines vanilla
+DeltaNet paper (Yang et al. 2024) — which GatedDeltaNet extends — defines vanilla
 DeltaNet as the α_t ≡ 1 special case: no memory decay before each update.
 
-Why DeltaNet for the IGAM ablation table:
-  Strips the α_t gate from IGAM, leaves the delta rule + dynamic write
+Why DeltaNet for the GatedDeltaNet ablation table:
+  Strips the α_t gate from GatedDeltaNet, leaves the delta rule + dynamic write
   strength β_t intact. The direct ablation question:
       "Does memory-decay gating (α_t) matter, given the delta rule already
        overwrites stale key→value associations through prediction error?"
-  IGAM's central claim is that α_t adds something orthogonal to the delta
+  GatedDeltaNet's central claim is that α_t adds something orthogonal to the delta
   rule. DeltaNet is the ablation that tests it.
 
 Math (per step, per head):
@@ -40,7 +40,7 @@ Stability:
     So the recurrence is contractive along the current key direction
     and identity elsewhere — bounded gradient flow under PPO's high-
     variance advantage signal. This is the structural guarantee that
-    Yang et al. cite in Gated DeltaNet §2 and that IGAM inherits.
+    Yang et al. cite in Gated DeltaNet §2 and that GatedDeltaNet inherits.
 
 Why both q AND k are L2-normalized:
     Schlag 2021 §3.3 normalizes k only ("the magnitude of k controls how
@@ -60,9 +60,9 @@ No feature map (identity):
 Side outputs:
     {"innovation": δ_t ∈ ℝ^{B × H × d_head}}
     The Phase B lifelong intrinsic reward r_life = ||δ_t||² is the same
-    quantity for DeltaNet as for IGAM. Exposing it from DeltaNet enables
+    quantity for DeltaNet as for GatedDeltaNet. Exposing it from DeltaNet enables
     a clean ablation row: "DeltaNet + lifelong-from-innovation reward"
-    vs "IGAM + lifelong-from-innovation reward" tests whether IGAM's
+    vs "GatedDeltaNet + lifelong-from-innovation reward" tests whether GatedDeltaNet's
     architectural gains transfer to the exploration mechanism.
 
 State:        {"W": (B, n_heads, d_head, d_head)}
@@ -78,7 +78,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class DeltaNet(RecurrentCell):
@@ -191,7 +191,7 @@ class DeltaNet(RecurrentCell):
         v_pred = torch.einsum("bhij,bhj->bhi", W_prev, k_norm)           # (B, H, D)
 
         # Innovation: δ = v − v̄. This is the lifelong-intrinsic-reward signal
-        # for Phase B exploration (r_life = ||δ||²), matching IGAM's contract.
+        # for Phase B exploration (r_life = ||δ||²), matching GatedDeltaNet's contract.
         delta = v - v_pred                                               # (B, H, D)
 
         # State update: W_new = W_prev + β · (δ ⊗ k̃).

@@ -12,7 +12,7 @@ Why this completes the 2×2 ablation:
   - RetNet:             W = γ W + k v^T                        (fixed scalar decay)
   - Mamba-2:            W = A_d W + dt B v^T                   (selective scalar decay)
   - DeltaNet:           W = W (I − β kk^T) + β v k^T            (delta rule, no decay)
-  - GatedDeltaNet/IGAM: W = α W (I − β kk^T) + β v k^T          (delta + selective scalar α)
+  - GatedDeltaNet: W = α W (I − β kk^T) + β v k^T          (delta + selective scalar α)
   - SHM (this cell):    M = M ⊙ C + (η v) k^T                  (element-wise calibration, no delta)
 
 SHM is the matrix-memory cell with the FINEST granularity of decay: a
@@ -66,7 +66,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 class SHM(RecurrentCell):

@@ -9,7 +9,7 @@ Why a custom adapter:
     Upstream uses the gymnax functional API (PRNG keys threaded through
     every reset/step, ``env, env_params = make(...)``), which doesn't match
     the synchronous gymnasium ``Env`` interface that the rest of the
-    training stack (SB3 VecEnv, IGAMPPO) expects. We hide the JAX plumbing
+    training stack (SB3 VecEnv, MemPPO) expects. We hide the JAX plumbing
     behind a single-env gymnasium adapter and stack ``DummyVecEnv`` on top.
 
     This isn't peak JAX throughput — no vmap over n_envs, and obs round-trip
@@ -73,7 +73,7 @@ class GymnaxToGymAdapter(gym.Env):
         seed: int = 0,
         normalize_image: bool = True,
     ) -> None:
-        import jax  # local import — JAX is optional for the rest of IGAM
+        import jax  # local import — JAX is optional for the rest of memrl
         import popgym_arcade
 
         self._jax = jax

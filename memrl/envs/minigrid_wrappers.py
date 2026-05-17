@@ -91,7 +91,7 @@ def make_minigrid_vec_env(
         seed:     base seed; env i is seeded with `seed + i`.
 
     Returns:
-        Vectorized environment ready to pass to IGAMPPO. The encoder will
+        Vectorized environment ready to pass to MemPPO. The encoder will
         see a flat 7*7*20 = 980-d float32 vector per timestep (3 bits set
         per cell out of 20).
     """

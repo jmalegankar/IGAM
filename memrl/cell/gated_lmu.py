@@ -86,8 +86,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
-from igam.cell.lmu import _legt_zoh_matrices
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.lmu import _legt_zoh_matrices
 
 
 GateType = Literal["softsign_sum", "tanh_product", "none"]

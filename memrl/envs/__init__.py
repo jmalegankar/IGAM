@@ -1,4 +1,4 @@
-"""Environment factories for IGAM benchmarks.
+"""Environment factories for POMDP / memory benchmarks.
 
 ``make_vec_env`` dispatches on the env name to the right factory. The
 ``popgym`` and ``minigrid`` factories are imported eagerly because their

@@ -3,9 +3,10 @@
 "Legendre Memory Units: Continuous-Time Representation in Recurrent Neural Networks"
 https://papers.nips.cc/paper/9689-legendre-memory-units-continuous-time-representation-in-recurrent-neural-networks
 
-The canonical scalar-input LMU. This is the BASELINE for the Phase A ablation
-table — explicitly NOT the gated / multichannel / OrthoLayer / dynamic-query
-variant from the IGAM thesis (lmu_t.py). Every IGAM enhancement is stripped:
+The canonical scalar-input LMU — explicitly NOT the gated / multichannel
+/ OrthoLayer / dynamic-query variant from the lmu_ppo thesis (`GatedLMU`
+/ `SelectiveLMU`, which live on the `gated-lmu` branch). Every gated /
+selective enhancement is stripped:
   - No gating (softsign_sum / tanh_product); u_t flows additively into memory.
   - No W_pre OrthoLayer / Cayley updates.
   - No multichannel u (scalar per timestep, as in Voelker 2019 Eq. 3).
@@ -72,7 +73,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from igam.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
+from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mask
 
 
 # --- Legendre-LegT state-space matrices ------------------------------------
