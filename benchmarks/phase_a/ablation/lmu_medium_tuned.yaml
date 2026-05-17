@@ -1,0 +1,45 @@
+# F1 — Plain LMU at GatedLMU-tuned hyperparameters.
+#
+# Tests whether the GatedLMU-tuned-vs-LMU gap (eval 0.53 vs -0.25 on
+# RepeatPreviousMedium) is the cell architecture or just the better
+# hyperparameters. Matches gated_lmu_medium_tuned.yaml on every dimension
+# except the cell:
+#   - lr: 2e-4 (was 1e-4 in lmu_medium.yaml)
+#   - memory_size: 128 (was 64)
+#   - theta: 200.0 (was 200.0 in lmu_medium.yaml, kept)
+#   - target_kl: 0.03 (was 0.02)
+#
+# Decision: if eval > 0.4, most of the gap is hyperparameters and the
+# architectural claim weakens. If eval stays near 0, the architecture is
+# doing real work.
+
+env_name: popgym-RepeatPreviousMedium-v0
+n_envs: 8
+
+total_timesteps: 2_000_000
+
+seed: 0
+
+cell:
+  name: LMU
+  kwargs:
+    memory_size: 128
+    theta: 200.0
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 2.0e-4
+target_kl: 0.03
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8
