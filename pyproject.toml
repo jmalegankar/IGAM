@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "igam"
 version = "0.1.0"
-description = "Innovation-Gated Associative Memory"
+description = "Recurrent / SSM memory cells and partially-observable RL environment wrappers under a common interface."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Jai Malegaonkar" }]
