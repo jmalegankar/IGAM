@@ -1,0 +1,48 @@
+# GatedLMU on RepeatPrevious-Medium — tuned for 2M-step convergence to
+# give it a fair shot in the canonical-baselines plot.
+#
+# Original gated_lmu_medium (memory_size=64, lr=1e-4) only reached +0.117
+# at 2M; the prior 5M tuned run peaked at +0.264 around 2.7M, suggesting
+# the cell just needs more compute OR faster convergence to be competitive.
+#
+# Changes vs gated_lmu_medium.yaml:
+#   memory_size: 64 → 128  — more Legendre capacity for 103-step episodes
+#                            (Easy had 32 coefs / 51 steps = 0.63; this
+#                             gives 128 / 103 = 1.24 — generous headroom)
+#   lr:          1e-4 → 2e-4  — faster convergence given target_kl protects
+#                                against KL violations
+#   target_kl:   0.02 → 0.03  — accommodate slightly larger updates
+#
+# Everything else identical for fair comparison.
+
+env_name: popgym-RepeatPreviousMedium-v0
+n_envs: 8
+
+total_timesteps: 2_000_000
+
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 128
+    theta: 200.0
+    gate_type: softsign_sum
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 2.0e-4
+target_kl: 0.03
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8
