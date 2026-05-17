@@ -7,6 +7,16 @@ This is the **`main` branch — the stable library**. Active research lives on s
 - [`igam`](../../tree/igam) — the Innovation-Gated Associative Memory thesis: headline cell (Gated DeltaNet), full 2×2 ablation matrix, benchmark configs, and design notes.
 - [`gated-lmu`](../../tree/gated-lmu) — Gated LMU and Selective LMU variants from the lmu_ppo thesis work.
 
+### Contribution workflow
+
+`main` is the upstream for shared infrastructure — new baseline cells, new env wrappers, fixes to the trainer or interface. Research branches consume `main` rather than copy from it:
+
+1. **New baseline or wrapper** → branch from `main`, PR back to `main`.
+2. **Research-branch work** → commit directly on the research branch (`igam`, `gated-lmu`, ...).
+3. **Pulling main into a research branch** → `git checkout <research-branch> && git merge main`. Do this periodically so the research branch inherits library improvements; small deltas mean easier conflict resolution.
+
+Experimental cells and project-specific notes stay on their research branch and don't backport to `main`.
+
 ## Install
 
 ```bash
