@@ -1,0 +1,35 @@
+# F1-suite — GatedLMU on AutoencodeMedium at the same tuned hyperparameters
+# as the F1 reference run (RepeatPreviousMedium). Paired with
+# lmu_autoencode_medium_tuned.yaml.
+
+env_name: popgym-AutoencodeMedium-v0
+n_envs: 8
+
+total_timesteps: 2_000_000
+
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 128
+    theta: 400.0
+    gate_type: softsign_sum
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 2.0e-4
+target_kl: 0.03
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8

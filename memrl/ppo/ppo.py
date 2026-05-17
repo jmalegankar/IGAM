@@ -208,6 +208,11 @@ class MemPPO(PPO):
         innovation_buf: list[float] = []
         state_norm_buf: list[dict[str, float]] = []
         action_dist_buf: list[np.ndarray] = []
+        # Per-phase innovation magnitudes — only populated for envs that
+        # surface info["phase"] (e.g. Autoencode via ExposePhaseInInfo). For
+        # envs without a phase signal the dict stays empty and no extra
+        # scalars are emitted to TB.
+        innovation_per_phase: dict[int, list[float]] = {}
 
         n_steps = 0
         while n_steps < n_rollout_steps:
@@ -229,6 +234,10 @@ class MemPPO(PPO):
                     innovation_buf.append(
                         side["innovation"].abs().mean().item()
                     )
+                    # Per-env innovation magnitude, for later phase-grouped logging.
+                    innov_per_env = side["innovation"].abs().mean(dim=-1).cpu().numpy()
+                else:
+                    innov_per_env = None
                 state_norm_buf.append({
                     k: v.norm().item() for k, v in new_state.items()
                 })
@@ -243,6 +252,20 @@ class MemPPO(PPO):
 
             self._update_info_buffer(infos, dones)
             action_dist_buf.append(actions_np.copy())
+
+            # Bucket per-env innovation by info["phase"] when the env exposes it.
+            # Off-by-one note: `infos` corresponds to new_obs (the step the env
+            # transitioned INTO); we treat that as a sufficient proxy for the
+            # phase of self._last_obs (the obs the cell actually consumed when
+            # producing this step's innovation). At most one boundary-step is
+            # mis-tagged per episode, which is negligible for aggregate stats.
+            if innov_per_env is not None:
+                for env_idx, info in enumerate(infos):
+                    if "phase" in info:
+                        phase = int(info["phase"])
+                        innovation_per_phase.setdefault(phase, []).append(
+                            float(innov_per_env[env_idx])
+                        )
 
             # Action storage convention (matches SB3 RolloutBuffer for Discrete:
             # (n_envs, 1) float arrays).
@@ -286,6 +309,16 @@ class MemPPO(PPO):
             )
             self.logger.record(
                 "debug/innovation_mag_max", float(np.max(innovation_buf))
+            )
+        # Phase-grouped innovation (only for envs that expose info["phase"]).
+        # Autoencode reports phase∈{0:WATCH, 1:PLAY}; the WATCH/PLAY ratio of
+        # innovation magnitudes is the interpretability signal we want.
+        for phase, vals in innovation_per_phase.items():
+            self.logger.record(
+                f"debug/innovation_mag_phase_{phase}_mean", float(np.mean(vals))
+            )
+            self.logger.record(
+                f"debug/innovation_mag_phase_{phase}_count", int(len(vals))
             )
         for key in state_norm_buf[0]:
             values_per_step = [s[key] for s in state_norm_buf]

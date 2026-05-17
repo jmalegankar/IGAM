@@ -92,9 +92,22 @@ class MemActorCriticPolicy(nn.Module):
                 better late-game ceiling. Best for final headline numbers.
         """
         super().__init__()
-        if not isinstance(action_space, spaces.Discrete):
+        # Action-space resolution. Both Discrete and MultiDiscrete are supported:
+        # Discrete(n)               -> _action_dims = [n],      _is_multi_discrete=False
+        # MultiDiscrete([a, b, ..]) -> _action_dims = [a, b, ..], _is_multi_discrete=True
+        # The actor outputs sum(_action_dims) logits; sampling / log_prob / entropy
+        # treat each dim as an independent Categorical and sum log-probs (per-dim
+        # independence is the standard MultiCategorical assumption, matching SB3).
+        if isinstance(action_space, spaces.Discrete):
+            self._action_dims = [int(action_space.n)]
+            self._is_multi_discrete = False
+        elif isinstance(action_space, spaces.MultiDiscrete):
+            self._action_dims = [int(n) for n in action_space.nvec]
+            self._is_multi_discrete = True
+        else:
             raise NotImplementedError(
-                "MemActorCriticPolicy currently supports Discrete action spaces only."
+                "MemActorCriticPolicy supports Discrete and MultiDiscrete action "
+                f"spaces only; got {type(action_space).__name__}."
             )
 
         self.shared_backbones = shared_backbones
@@ -148,10 +161,11 @@ class MemActorCriticPolicy(nn.Module):
             output_size_for_head = cell_actor.output_size
 
         head_dim = encoder_dim + output_size_for_head
-        n_actions = action_space.n
 
-        # Actor head — single linear over concat(φ_a, y_a).
-        self.actor = nn.Linear(head_dim, n_actions)
+        # Actor head — single linear over concat(φ_a, y_a). For MultiDiscrete
+        # we emit sum(_action_dims) logits in one tensor; downstream helpers
+        # split them by dim and build per-dim Categoricals.
+        self.actor = nn.Linear(head_dim, sum(self._action_dims))
         nn.init.orthogonal_(self.actor.weight, gain=0.01)
         nn.init.zeros_(self.actor.bias)
 
@@ -209,6 +223,49 @@ class MemActorCriticPolicy(nn.Module):
             return episode_start.to(dtype=th.bool, device=device)
         return th.as_tensor(episode_start, dtype=th.bool, device=device)
 
+    # ── action distribution helpers (Discrete + MultiDiscrete) ─────────────
+
+    def _build_dists(self, logits: Tensor) -> list[Categorical]:
+        """Split policy logits by per-dim action sizes; return one Categorical per dim.
+
+        For Discrete this is a 1-element list. For MultiDiscrete it's len(nvec)
+        Categoricals, treated as independent.
+        """
+        if self._is_multi_discrete:
+            return [Categorical(logits=part) for part in th.split(logits, self._action_dims, dim=-1)]
+        return [Categorical(logits=logits)]
+
+    def _sample_action(
+        self, dists: list[Categorical], deterministic: bool,
+    ) -> Tensor:
+        """Sample (or argmax) an action from a list of per-dim Categoricals.
+
+        Returns shape (..., len(dists)) for MultiDiscrete or (...,) for Discrete.
+        """
+        per_dim = [
+            d.logits.argmax(dim=-1) if deterministic else d.sample()
+            for d in dists
+        ]
+        if self._is_multi_discrete:
+            return th.stack(per_dim, dim=-1)
+        return per_dim[0]
+
+    def _log_prob(self, dists: list[Categorical], actions: Tensor) -> Tensor:
+        """Sum per-dim log-probs under the independence assumption.
+
+        For Discrete: `actions` is (...,) long, returns (...,).
+        For MultiDiscrete: `actions` is (..., len(dists)) long, returns (...,).
+        """
+        if self._is_multi_discrete:
+            return sum(d.log_prob(actions[..., i]) for i, d in enumerate(dists))
+        return dists[0].log_prob(actions)
+
+    def _entropy(self, dists: list[Categorical]) -> Tensor:
+        """Sum per-dim entropies (independence)."""
+        if self._is_multi_discrete:
+            return sum(d.entropy() for d in dists)
+        return dists[0].entropy()
+
     # ── rollout (single step) ──────────────────────────────────────────────
 
     def forward(
@@ -256,12 +313,9 @@ class MemActorCriticPolicy(nn.Module):
             critic_head = th.cat([phi_c, y_c], dim=-1)
 
         logits = self.actor(actor_head)
-        dist = Categorical(logits=logits)
-        if deterministic:
-            action = logits.argmax(dim=-1)
-        else:
-            action = dist.sample()
-        log_prob = dist.log_prob(action)
+        dists = self._build_dists(logits)
+        action = self._sample_action(dists, deterministic=deterministic)
+        log_prob = self._log_prob(dists, action)
         value = self.critic(critic_head).squeeze(-1)
 
         return action, value, log_prob, _merge_state(new_actor_state, new_critic_state), side
@@ -309,9 +363,9 @@ class MemActorCriticPolicy(nn.Module):
                 critic_head = th.cat([phi_c, y_c], dim=-1)
 
             logits = self.actor(actor_head)
-            dist = Categorical(logits=logits)
-            all_log_probs.append(dist.log_prob(actions_seq[:, k_step]))
-            all_entropy.append(dist.entropy())
+            dists = self._build_dists(logits)
+            all_log_probs.append(self._log_prob(dists, actions_seq[:, k_step]))
+            all_entropy.append(self._entropy(dists))
             all_values.append(self.critic(critic_head).squeeze(-1))
 
         values    = th.stack(all_values,    dim=1).reshape(B * K)

@@ -13,12 +13,23 @@ This module hosts two cells that share the same forward pass:
 Differences from canonical `LMU` (Voelker 2019, kept in `lmu.py`):
   - **Multichannel u_t** (shape ℝ^C, not scalar) — Legendre memory is a
     (D, C) matrix instead of a (D,) vector. Higher capacity.
+    Toggleable via `multichannel: bool` (default True). When False, u
+    collapses to (B, 1) via a learned scalar projection and the memory state
+    becomes (B, K, D, 1) — matching canonical-LMU scalar bandwidth while
+    keeping the gating / readout machinery intact.
   - **Gated write** controlled by `gate_type` ∈ {softsign_sum, tanh_product,
     none}.
   - **Dynamic readout** via W_query — attention pointer over Legendre coefs.
+    Toggleable via `dynamic_readout: bool` (default True). When False, the
+    readout uses a fixed `W_static: Linear(D, 1)` projection over the
+    Legendre dim instead — a static linear pooling, like canonical LMU.
   - **Anti-collapse residual** to keep memory from stagnating once E_h
     predicts u_x perfectly.
   - **Innovation as side output** for Phase B's lifelong intrinsic reward.
+
+  The three "baseline GatedLMU vs LMU" features (multichannel u, gated
+  write, dynamic readout) are each toggleable independently, so the
+  GatedLMU → LMU gradient can be ablated one feature at a time.
 
 Extensions (each toggleable; all default OFF):
 
@@ -127,6 +138,9 @@ class GatedLMU(RecurrentCell):
         theta: float = 100.0,
         gate_type: GateType = "softsign_sum",
         residual_scale: float = 0.05,
+        # ── core ablation flags (all default ON for backward compat) ────────
+        multichannel: bool = True,
+        dynamic_readout: bool = True,
         # ── freebies (all default OFF) ──────────────────────────────────────
         layer_norm: bool = False,
         readout_skip_scale: float = 0.0,
@@ -156,6 +170,12 @@ class GatedLMU(RecurrentCell):
         self.n_scales = n_scales
         self.scale_factor = scale_factor
         self.readout_skip_scale = float(readout_skip_scale)
+        self.multichannel = multichannel
+        self.dynamic_readout = dynamic_readout
+        # Effective channel dim — input_size when multichannel, else 1 (scalar u).
+        # All shape-bearing internals (e_x, E_h, W_pre, W_m, W_calib, memory state)
+        # use _C so the same forward pass handles both regimes.
+        self._C = input_size if multichannel else 1
 
         # ── HiPPO-LegT matrices, one per scale ──────────────────────────────
         # For K=3, sf=2: thetas = [θ/2, θ, 2θ]
@@ -172,25 +192,41 @@ class GatedLMU(RecurrentCell):
         self.register_buffer("B", torch.stack(B_list, dim=0))           # (K, D, 1)
 
         # ── Encoder parameters ──────────────────────────────────────────────
-        self.e_x = nn.Parameter(torch.empty(input_size))
-        self.E_h = nn.Linear(hidden_size, input_size, bias=False)
-        # Per-scale pooling over Legendre dim: (K, D).
+        # Multichannel: u_x = x * normalize(e_x), shape (B, C) — per-channel.
+        # Scalar:       u_x = e_x_scalar(x),     shape (B, 1) — canonical LMU style.
+        if multichannel:
+            self.e_x: Optional[nn.Parameter] = nn.Parameter(torch.empty(input_size))
+            self.e_x_scalar: Optional[nn.Linear] = None
+        else:
+            self.e_x = None
+            self.e_x_scalar = nn.Linear(input_size, 1, bias=False)
+        self.E_h = nn.Linear(hidden_size, self._C, bias=False)
+        # Per-scale pooling over Legendre dim: (K, D). Outputs (B, K, _C) via einsum.
         self.e_m = nn.Parameter(torch.zeros(n_scales, memory_size))
 
         # ── W_pre: pre-write transform on the innovation vector ─────────────
         if gate_type != "none":
-            self.W_pre: Optional[nn.Linear] = nn.Linear(input_size, input_size, bias=False)
+            self.W_pre: Optional[nn.Linear] = nn.Linear(self._C, self._C, bias=False)
         else:
             self.W_pre = None
         self._orthogonal_W_pre = orthogonal_W_pre and self.W_pre is not None
 
-        # ── Dynamic readout (W_query) ───────────────────────────────────────
-        self.W_query = nn.Linear(hidden_size, memory_size, bias=False)
+        # ── Readout: dynamic (W_query attention) or static (fixed W_static) ─
+        if dynamic_readout:
+            self.W_query: Optional[nn.Linear] = nn.Linear(hidden_size, memory_size, bias=False)
+            self.W_static: Optional[nn.Linear] = None
+        else:
+            self.W_query = None
+            # Static linear pooling over the Legendre dim. Parameterized as
+            # Linear(D, 1) so the readout is "look at this fixed combination of
+            # Legendre coefficients every step," analogous to canonical LMU's
+            # W_m·m read but factored out from the hidden update.
+            self.W_static = nn.Linear(memory_size, 1, bias=False)
 
         # ── Hidden update kernels ───────────────────────────────────────────
         self.W_x = nn.Linear(input_size, hidden_size, bias=True)
         self.W_h = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.W_m = nn.Linear(input_size, hidden_size, bias=False)
+        self.W_m = nn.Linear(self._C, hidden_size, bias=False)
 
         # ── LayerNorm (freebie) ─────────────────────────────────────────────
         self.ln_h: nn.Module = (
@@ -227,7 +263,7 @@ class GatedLMU(RecurrentCell):
         # large but workable.
         if hadamard_calib:
             self.W_calib: Optional[nn.Linear] = nn.Linear(
-                hidden_size, n_scales * memory_size * input_size, bias=True,
+                hidden_size, n_scales * memory_size * self._C, bias=True,
             )
         else:
             self.W_calib = None
@@ -242,7 +278,11 @@ class GatedLMU(RecurrentCell):
 
     def reset_parameters(self) -> None:
         # Encoder
-        nn.init.uniform_(self.e_x, -1.0, 1.0)
+        if self.e_x is not None:
+            nn.init.uniform_(self.e_x, -1.0, 1.0)
+        if self.e_x_scalar is not None:
+            # Canonical LMU uses LeCun uniform on its scalar input projection.
+            nn.init.xavier_uniform_(self.e_x_scalar.weight)
         nn.init.xavier_normal_(self.E_h.weight)
         # e_m stays at zero: memory contributes nothing to u at init.
 
@@ -251,9 +291,13 @@ class GatedLMU(RecurrentCell):
         if self.W_pre is not None:
             nn.init.eye_(self.W_pre.weight)
 
-        # Dynamic readout: small gain so cell starts with negligible memory
+        # Readout: small gain so cell starts with negligible memory
         # influence on h; learns the pointer over training.
-        nn.init.orthogonal_(self.W_query.weight, gain=0.01)
+        if self.W_query is not None:
+            nn.init.orthogonal_(self.W_query.weight, gain=0.01)
+        if self.W_static is not None:
+            # Same small-gain spirit so the static readout starts near zero.
+            nn.init.orthogonal_(self.W_static.weight, gain=0.01)
 
         # Hidden update kernels: Xavier on weights, zero on bias.
         for layer in (self.W_x, self.W_h, self.W_m):
@@ -329,7 +373,7 @@ class GatedLMU(RecurrentCell):
                 batch_size, self.hidden_size, device=device, dtype=dtype,
             ),
             "m": torch.zeros(
-                batch_size, self.n_scales, self.memory_size, self.input_size,
+                batch_size, self.n_scales, self.memory_size, self._C,
                 device=device, dtype=dtype,
             ),
         }
@@ -350,9 +394,12 @@ class GatedLMU(RecurrentCell):
         h_normed = self.ln_h(h_prev)                                   # (B, H)
 
         # ── 1) encode ──────────────────────────────────────────────────────
-        e_x_n = F.normalize(self.e_x, dim=0)                            # (C,)
-        u_x = x * e_x_n                                                 # (B, C)
-        u_h = self.E_h(h_normed)                                        # (B, C)
+        if self.multichannel:
+            e_x_n = F.normalize(self.e_x, dim=0)                        # (C,)
+            u_x = x * e_x_n                                             # (B, C)
+        else:
+            u_x = self.e_x_scalar(x)                                    # (B, 1)
+        u_h = self.E_h(h_normed)                                        # (B, _C)
 
         # Per-scale memory pooling, then mix over scales.
         u_m_per_scale = torch.einsum("kd,bkdc->bkc", self.e_m, m_prev)  # (B, K, C)
@@ -377,24 +424,32 @@ class GatedLMU(RecurrentCell):
             g = torch.sigmoid(self.W_g(h_normed))                       # (B, K)
             Am = Am * g.unsqueeze(-1).unsqueeze(-1)
 
-        # Hadamard calibration: per-element leak factor in (0, 1)^{K, D, C}.
+        # Hadamard calibration: per-element leak factor in (0, 1)^{K, D, _C}.
         if self.W_calib is not None:
             calib = torch.sigmoid(self.W_calib(h_normed)).view(
-                -1, self.n_scales, self.memory_size, self.input_size,
-            )                                                           # (B, K, D, C)
+                -1, self.n_scales, self.memory_size, self._C,
+            )                                                           # (B, K, D, _C)
             Am = Am * calib
 
         # Write: B is (K, D, 1), u_actual is (B, C). Broadcast to (B, K, D, C).
         Bu = self.B.unsqueeze(0) * u_actual.unsqueeze(1).unsqueeze(2)   # (B, K, D, C)
         m_new = Am + Bu                                                 # (B, K, D, C)
 
-        # ── 4) dynamic readout (per-scale, then mix) ────────────────────────
-        C_t = F.normalize(self.W_query(h_normed), dim=-1)               # (B, D)
-        y_per_scale = torch.einsum("bd,bkdc->bkc", C_t, m_new)          # (B, K, C)
-        if mix is not None:
-            y_internal = torch.einsum("bk,bkc->bc", mix, y_per_scale)   # (B, C)
+        # ── 4) readout (per-scale, then mix) ───────────────────────────────
+        # Dynamic: C_t = normalize(W_query · h_normed)        — attention pointer over Legendre dim
+        # Static:  pool m_new over D with fixed W_static       — data-independent linear readout
+        if self.dynamic_readout:
+            C_t = F.normalize(self.W_query(h_normed), dim=-1)           # (B, D)
+            y_per_scale = torch.einsum("bd,bkdc->bkc", C_t, m_new)      # (B, K, _C)
         else:
-            y_internal = y_per_scale.squeeze(1)                         # (B, C)
+            # W_static.weight shape (1, D); contract over D → (B, K, _C).
+            y_per_scale = torch.einsum(
+                "d,bkdc->bkc", self.W_static.weight.squeeze(0), m_new,
+            )                                                           # (B, K, _C)
+        if mix is not None:
+            y_internal = torch.einsum("bk,bkc->bc", mix, y_per_scale)   # (B, _C)
+        else:
+            y_internal = y_per_scale.squeeze(1)                         # (B, _C)
 
         # Readout skip (freebie).
         if self.readout_skip_scale > 0.0:

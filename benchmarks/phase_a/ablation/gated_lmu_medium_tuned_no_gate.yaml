@@ -1,0 +1,46 @@
+# F4 — GatedLMU baseline with predictive-coding gate DISABLED.
+#
+# Tests whether the predictive-coding write (softsign(u_x) +
+# softsign(pred - u_x)) carries the GatedLMU advantage, or whether
+# multichannel u + dynamic readout alone are sufficient.
+#
+# Identical to gated_lmu_medium_tuned.yaml except:
+#   gate_type: softsign_sum -> none
+# (Other GatedLMU extensions stay OFF — this is the GatedLMU baseline,
+# not SelectiveLMU.)
+#
+# Decision: if eval matches softsign_sum within 0.05, the predictive-
+# coding gate is decorative — the paper should refocus on multichannel
+# + dynamic readout.
+
+env_name: popgym-RepeatPreviousMedium-v0
+n_envs: 8
+
+total_timesteps: 2_000_000
+
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 128
+    theta: 200.0
+    gate_type: none
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 2.0e-4
+target_kl: 0.03
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8
