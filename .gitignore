@@ -24,3 +24,5 @@ runs/
 .idea/
 .vscode/
 *.swp
+plots/
+scripts/
