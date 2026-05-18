@@ -146,6 +146,120 @@ For Autoencode specifically, also log the new `debug/innovation_mag_phase_{0,1}_
 
 ---
 
+## F1 — CountRecallMedium (2026-05-17)
+
+### Initial 2M-step comparison
+
+Plain LMU groks at ~1M and finishes well above random; both GatedLMU variants barely move:
+
+| Arm | best | final 25% |
+|---|---:|---:|
+| LMU | −0.528 | −0.602 |
+| GatedLMU softsign + dyn read | −0.829 | −0.869 |
+| GatedLMU none + dyn read | −0.808 | −0.853 |
+
+Initial interpretation was that the GatedLMU architecture is **anti-aligned with counting tasks** (multichannel u dilutes the integration signal). That was wrong.
+
+### Diagnostic ablations
+
+Three follow-up runs to isolate which architectural delta was driving the gap, and whether more compute would close it:
+
+| Arm | step | best | final 25% |
+|---|---:|---:|---:|
+| GatedLMU none + STATIC readout (Xavier-init `W_static` instead of small-init `W_query`) | 2M | −0.767 | −0.817 |
+| **GatedLMU none + dyn read, extended to 5M** | 5M | **−0.534** | **−0.622** |
+| **GatedLMU softsign + dyn read, extended to 5M** | 5M | **−0.495** | **−0.603** |
+
+### Finding — *both* GatedLMU variants grok between 2.5M and 3M and reach LMU's converged level by 4M
+
+The 2M underperformance was a **pre-grokking snapshot**, not architectural mismatch. The S-curve is clear (5M softsign deciles):
+
+| % training | step | eval |
+|---:|---:|---:|
+| 30% | 1.5M | −0.89 |
+| 40% | 2.0M | −0.83 ← *the 2M endpoint we initially observed* |
+| 50% | 2.5M | −0.77 ← grokking begins |
+| 60% | 3.0M | −0.66 |
+| 80% | 4.0M | −0.59 ← matches LMU's converged level |
+| 100% | 5.0M | −0.55 |
+
+5M no-gate follows the same trajectory, peaks at −0.53. **At convergence, LMU and GatedLMU (both gate types) achieve indistinguishable performance on CountRecallMedium.**
+
+### Decomposition of the GatedLMU 2M warm-up cost
+
+Comparing 2M results across architectural variants:
+
+| Architectural difference vs LMU | Effect on 2M best eval |
+|---|---:|
+| + multichannel u (64-dim vs scalar) | ~−0.20 (warm-up cost, not capacity loss) |
+| + dynamic readout (small-init `W_query` vs Xavier `W_static`) | ~−0.04 to −0.06 |
+| + softsign vs none gate | ≤0.02 (within noise) |
+
+Multichannel u contributes most of the warm-up delay. The W_query small-init contributes a small additional delay (static readout closes ~0.04 of the gap at 2M). Gate type is essentially irrelevant on this task at any budget.
+
+### Updated interpretation
+
+- The 2M F4 result on RepeatPrevious (gate gives stability over no-gate) **is real**, but on CountRecall *gate doesn't matter at all*. The gating mechanism specifically helps selective-recall tasks; on accumulation tasks it's neutral.
+- The GatedLMU architecture is **not** anti-aligned with counting — it just has a longer warm-up. Multichannel u + dynamic readout each contribute init-time delay that costs ~2M extra steps to amortize on counting tasks.
+- The user's grokking hypothesis ("might grok after like 5 mil") was bang-on.
+
+### Outstanding question for the paper story
+
+**Does LMU on RepeatPreviousMedium also catch up to GatedLMU at extended budget?**
+
+If yes: the RepeatPrevious gap narrows and the gate is *only* about warm-up speed, not converged capacity.
+If no: GatedLMU has a real selective-recall advantage that holds even at convergence.
+
+Settling this is the next experiment — see **15M RP-Medium three-way** below.
+
+---
+
+## F1 — BattleshipEasy (2026-05-17)
+
+| Arm | best | final | final 25% |
+|---|---:|---:|---:|
+| **LMU** | **−0.246** | −0.462 | **−0.432** |
+| GatedLMU softsign | −0.421 | −0.513 | −0.565 |
+
+LMU wins by ~0.17 at best. GatedLMU's trajectory shows the same slow-improvement signature as CountRecall (−0.66 → −0.51 over 2M, still climbing) — consistent with the multichannel-u + dynamic-readout warm-up cost rather than a fundamental architectural mismatch. Extending to 5M+ would likely close the gap further.
+
+Sanity comparison vs SHM paper baselines at 15M: our **LMU at 2M (−0.246) outperforms POPGym's reported GRU −0.411 and FFM −0.340 on the same task at 7.5× our compute**. SHM remains SOTA at −0.123. Our LMU is a credible baseline.
+
+Run dirs: `runs/gate/F1/battleship_easy/{lmu,gated_lmu}_battleship_easy_tuned/...`.
+
+---
+
+## F1 — 4-env summary table (2M, single seed)
+
+| Env | LMU best | GatedLMU best | Δ (gate − LMU) | Story |
+|---|---:|---:|---:|---|
+| RepeatPreviousMedium | 0.047 | **0.653** | **+0.61** | Gate wins — selective recall aligns with predictive-coding write |
+| AutoencodeMedium | −0.387 | −0.425 | −0.04 | Both fail at 2M; per SHM paper, even most-baselines fail at 15M |
+| CountRecallMedium | −0.528 | −0.829 | −0.30 | LMU wins at 2M, **equilibrate at 5M** (grokking confirmed) |
+| BattleshipEasy | −0.246 | −0.421 | −0.17 | LMU wins at 2M, GatedLMU still climbing (probably closes at 5M+) |
+
+**Pattern.** GatedLMU has a longer warm-up (multichannel u + dynamic-readout's small-init W_query) and *eventually* equilibrates with LMU on 2 of 3 testable envs (CountRecall confirmed at 5M; Battleship plausibly converges similarly). The 2M-budget comparison consistently favors LMU on accumulation/spatial tasks. Only on RepeatPrevious does the gating mechanism produce a clear win, and even there the question is whether LMU also catches up at extended budgets.
+
+---
+
+## 15M RP-Medium three-way (queued; runs overnight 2026-05-17 → 2026-05-18)
+
+**Question.** Is GatedLMU's RP-Medium win a convergence story or a warm-up speed story?
+
+**Setup.** 3 arms × 15M env steps, single seed, all parallel:
+- LMU (matched hyperparams: lr=2e-4, mem=128, θ=200) — [config](benchmarks/phase_a/ablation/lmu_medium_tuned_15M.yaml)
+- GatedLMU softsign — [config](benchmarks/phase_a/ablation/gated_lmu_medium_tuned_15M.yaml)
+- GatedLMU none — [config](benchmarks/phase_a/ablation/gated_lmu_medium_tuned_no_gate_15M.yaml)
+
+Output: `runs/gate/F1/repeat_previous_medium_15M/`. Launcher: [`scripts/run_rp_medium_15M.sh`](scripts/run_rp_medium_15M.sh). Expected ~8-12h.
+
+**Decision rules:**
+- *If LMU converges to ≥0.55* (matches GatedLMU softsign 2M peak) → gate is purely a warm-up speed story; final paper claim becomes "GatedLMU converges 3-5× faster than LMU on selective-recall tasks, equilibrates on accumulation tasks." Useful but less of a claim than "gate wins at convergence."
+- *If LMU plateaus much below GatedLMU at 15M* → GatedLMU has a real selective-recall convergence advantage that LMU can't reach. Paper claim is stronger: "the gating mechanism provides converged-capacity gains on tasks where the selective-write inductive bias is correct."
+- *gate (softsign) vs none at 15M* on RP-Medium will also reveal whether the F4 stability story (gate prevents late-training collapse) generalizes to the long-horizon regime.
+
+---
+
 ---
 
 ## Infrastructure additions for the 4-env suite (2026-05-17)
