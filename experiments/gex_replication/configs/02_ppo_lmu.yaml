@@ -3,7 +3,7 @@
 # The cell is stuck writing corridor observations; it never sees the hint.
 env_name: MiniGrid-MemoryS11-v0
 n_envs: 16
-total_timesteps: 3_000_000
+total_timesteps: 1_500_000
 seed: 0
 
 cell:

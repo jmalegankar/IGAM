@@ -3,7 +3,7 @@
 # observes the hint. Works but slow (LMU writes everything uniformly).
 env_name: MiniGrid-MemoryS11-v0
 n_envs: 16
-total_timesteps: 5_000_000
+total_timesteps: 10_000_000
 seed: 0
 
 cell:

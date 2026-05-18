@@ -1,0 +1,45 @@
+# Pure LMU + PPO baseline on MiniGrid-MemoryS13.
+#
+# The first MiniGrid baseline — establishes whether canonical LMU can
+# learn the selective-recall task (hint at start, decide at corridor end).
+# Hyperparams mirror the existing mslmu_mg_s13.yaml so this run is directly
+# comparable to any future GatedLMU / SelectiveLMU runs on the same env.
+#
+# theta=200: episodes max at 256 steps; θ=200 covers the typical decision
+# horizon (~70-100 step corridor + 50-step prefix/suffix) with modest
+# headroom. Memory_size=64 is generous (1.24× ratio after the OneHot
+# encoding for an episode length of ~150-step average).
+#
+# 2M is the baseline budget — extend to 5M if the trajectory shows
+# pre-grokking (like CountRecall did on POPGym).
+
+env_name: MiniGrid-MemoryS13-v0
+n_envs: 8
+
+total_timesteps: 2_000_000
+
+seed: 0
+
+cell:
+  name: LMU
+  kwargs:
+    memory_size: 64
+    theta: 200.0
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 1.0e-4
+target_kl: 0.02
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8
