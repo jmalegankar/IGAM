@@ -1,0 +1,39 @@
+# Ablation: no gate (gate_type=none). Residual also disabled — it's only
+# meaningful when gating can cause memory collapse; without a gate, writes
+# are always u_x + pred so there's no collapse mechanism to prevent.
+env_name: MiniGrid-MemoryS13-v0
+n_envs: 16
+total_timesteps: 5_000_000
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 64
+    theta: 100.0
+    gate_type: none               # gate OFF (residual auto-disabled by cell)
+    residual_scale: 0.0
+    dynamic_readout: true
+    orthogonal_W_pre: true
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 3.0e-4
+n_steps: 512
+n_epochs: 4
+gamma: 0.999
+gae_lambda: 0.98
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 0.5
+max_grad_norm: 0.5
+target_kl: 0.05
+
+chunk_len: 16
+n_chunks_per_batch: 16
+
+use_wrapper: false
+beta_ep: 0.1
+phi_source: random_encoder
+lambda_reg: 1.0

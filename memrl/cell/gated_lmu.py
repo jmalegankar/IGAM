@@ -291,13 +291,19 @@ class GatedLMU(RecurrentCell):
         if self.W_pre is not None:
             nn.init.eye_(self.W_pre.weight)
 
-        # Readout: small gain so cell starts with negligible memory
-        # influence on h; learns the pointer over training.
+        # Readout init differs by readout type:
+        #  - W_query (dynamic, attention pointer): small gain=0.01 so memory
+        #    starts with negligible influence on h; the cell *learns* where
+        #    to point. This is by design for the dynamic readout.
+        #  - W_static (static linear pool over D): Xavier, matching canonical
+        #    LMU's W_m. A static readout doesn't have the "memory dominates
+        #    early" failure mode that motivates the small W_query gain, and
+        #    starting at full Xavier scale lets memory contribute to h from
+        #    step 1 — the natural LMU analogue.
         if self.W_query is not None:
             nn.init.orthogonal_(self.W_query.weight, gain=0.01)
         if self.W_static is not None:
-            # Same small-gain spirit so the static readout starts near zero.
-            nn.init.orthogonal_(self.W_static.weight, gain=0.01)
+            nn.init.xavier_normal_(self.W_static.weight)
 
         # Hidden update kernels: Xavier on weights, zero on bias.
         for layer in (self.W_x, self.W_h, self.W_m):

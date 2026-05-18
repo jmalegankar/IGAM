@@ -47,6 +47,8 @@ from minigrid.wrappers import ImgObsWrapper, OneHotPartialObsWrapper
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv
 
+from .mem_start import MemoryStartWrapper
+
 
 class CastImageFloat32(gym.ObservationWrapper):
     """Cast a uint8 image observation to float32 with the same value range.
@@ -75,6 +77,7 @@ def make_minigrid_vec_env(
     env_name: str,
     n_envs: int = 8,
     seed: int = 0,
+    use_wrapper: bool = False,
 ) -> VecEnv:
     """Build a vectorized MiniGrid environment for memory tasks.
 
@@ -86,9 +89,11 @@ def make_minigrid_vec_env(
         → Monitor                      # SB3 episode-reward bookkeeping
 
     Args:
-        env_name: full gym id, e.g. "MiniGrid-MemoryS13-v0".
-        n_envs:   number of parallel environments.
-        seed:     base seed; env i is seeded with `seed + i`.
+        env_name:    full gym id, e.g. "MiniGrid-MemoryS13-v0".
+        n_envs:      number of parallel environments.
+        seed:        base seed; env i is seeded with `seed + i`.
+        use_wrapper: if True, apply MemoryStartWrapper to force corridor-entrance
+                     spawn (Phase 0/1 crutch — removes the exploration bottleneck).
 
     Returns:
         Vectorized environment ready to pass to MemPPO. The encoder will
@@ -98,6 +103,8 @@ def make_minigrid_vec_env(
     def _make_one(rank: int):
         def _init():
             env = gym.make(env_name)
+            if use_wrapper:
+                env = MemoryStartWrapper(env)
             env = OneHotPartialObsWrapper(env)
             env = ImgObsWrapper(env)
             env = CastImageFloat32(env)

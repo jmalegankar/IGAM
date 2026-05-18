@@ -1,0 +1,40 @@
+# Ablation: no dynamic W_query. Uses fixed static pooling over Legendre
+# coefficients instead of the attention pointer C_t = normalize(W_query(h)).
+# The readout can no longer adapt which Legendre order is read based on
+# the current hidden state.
+env_name: MiniGrid-MemoryS13-v0
+n_envs: 16
+total_timesteps: 5_000_000
+seed: 0
+
+cell:
+  name: GatedLMU
+  kwargs:
+    memory_size: 64
+    theta: 100.0
+    gate_type: softsign_sum
+    residual_scale: 0.05
+    dynamic_readout: false        # W_query attention OFF → W_static pooling
+    orthogonal_W_pre: true
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 3.0e-4
+n_steps: 512
+n_epochs: 4
+gamma: 0.999
+gae_lambda: 0.98
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 0.5
+max_grad_norm: 0.5
+target_kl: 0.05
+
+chunk_len: 16
+n_chunks_per_batch: 16
+
+use_wrapper: false
+beta_ep: 0.1
+phi_source: random_encoder
+lambda_reg: 1.0

@@ -1,0 +1,30 @@
+# Exp 1: Pure PPO (GRU cell as minimal recurrence proxy, no LMU memory).
+# Expected: fails — agent can't bridge hint → junction across the corridor.
+env_name: MiniGrid-MemoryS11-v0
+n_envs: 16
+total_timesteps: 3_000_000
+seed: 0
+
+cell:
+  name: GRU
+  kwargs: {}
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 3.0e-4
+n_steps: 512
+n_epochs: 4
+gamma: 0.999
+gae_lambda: 0.98
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 0.5
+max_grad_norm: 0.5
+target_kl: 0.05
+
+chunk_len: 16
+n_chunks_per_batch: 16
+
+use_wrapper: false
+beta_ep: 0.0

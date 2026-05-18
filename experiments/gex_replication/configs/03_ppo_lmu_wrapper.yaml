@@ -1,0 +1,33 @@
+# Exp 3: PPO + canonical LMU + MemoryStartWrapper, no E3B.
+# Expected: learns — wrapper forces corridor-entrance spawn so agent always
+# observes the hint. Works but slow (LMU writes everything uniformly).
+env_name: MiniGrid-MemoryS11-v0
+n_envs: 16
+total_timesteps: 5_000_000
+seed: 0
+
+cell:
+  name: LMU
+  kwargs:
+    memory_size: 64
+    theta: 100.0
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 3.0e-4
+n_steps: 512
+n_epochs: 4
+gamma: 0.999
+gae_lambda: 0.98
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 0.5
+max_grad_norm: 0.5
+target_kl: 0.05
+
+chunk_len: 16
+n_chunks_per_batch: 16
+
+use_wrapper: true
+beta_ep: 0.0

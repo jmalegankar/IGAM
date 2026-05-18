@@ -72,6 +72,32 @@ The 4-env suite below is what would actually settle this.
 
 ---
 
+## F1 — AutoencodeMedium (2026-05-17)
+
+| Cell | eval final | eval best | final 25% | wall time |
+|---|---:|---:|---:|---:|
+| LMU (tuned, θ=400, mem=128) | −0.479 | −0.387 | −0.484 | 72 min |
+| GatedLMU (tuned, θ=400, mem=128) | −0.540 | −0.425 | −0.490 | 55 min |
+
+Both arms stuck at random (−0.5) for the full 2M steps. No learning signal in either trajectory. `phase_0` (WATCH) and `phase_1` (PLAY) innovation magnitudes for GatedLMU are 0.42 vs 0.40 — basically identical, meaning **the cell never learned to use the phase flag** despite it being plainly exposed in the obs.
+
+Run dirs (both at `runs/gate/F1/autoencode_medium/`):
+- `lmu_autoencode_medium_tuned/LMU/seed_0_20260517_140438/`
+- `gated_lmu_autoencode_medium_tuned/GatedLMU/seed_0_20260517_140441/`
+
+### ⚠️ TODO — Autoencode-specific tuning still required
+
+This null result is **consistent with the broader POPGym literature**, not a bug in our setup. The Stable Hadamard Memory paper ([Le et al. 2025, arXiv:2410.10132](https://arxiv.org/abs/2410.10132)) reports that essentially all standard POMDP-RL cells (GRU, LSTM, S4D, S5, FFM, Linear Transformer, Mamba) fail Autoencode at standard budgets — SHM is the architecture they introduce specifically to address this gap, and is one of the few cells that demonstrably solves it.
+
+Implication: comparing LMU vs GatedLMU at hyperparams calibrated for RepeatPrevious is not a fair Autoencode test. To properly include Autoencode in the suite we'd need:
+- Per-env LR / step-budget tuning (Autoencode often needs longer training);
+- Possibly larger `memory_size` (the obs alphabet is bigger);
+- Or a different cell family entirely (the SHM finding suggests matrix-memory + Hadamard calibration is the relevant architectural lever, not just gating an LMU).
+
+**Decision for now:** treat the AutoencodeMedium result as **observation, not evidence**. The gate-vs-no-gate question gets answered on RepeatPrevious + CountRecall + Battleship — Autoencode tuning is a separate workstream we'll come back to after the suite lands.
+
+---
+
 ## F1 expanded — 4-env suite (next, queued)
 
 **Motivation.** Single-task F1/F4 results suggest gating provides *training-stability* rather than a final-eval bump. Need to confirm on additional pure-memory POPGym envs before committing to that framing. The exploration+memory question (whether gating matters more for exploration-driven memory tasks like MiniGrid-Memory) is deferred to a separate phase.
