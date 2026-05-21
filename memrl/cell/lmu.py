@@ -79,6 +79,39 @@ from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mas
 # --- Legendre-LegT state-space matrices ------------------------------------
 
 
+def _legs_matrices(memory_size: int) -> tuple[Tensor, Tensor]:
+    """Build HiPPO-LegS (A, B) — scale-invariant basis, no window parameter.
+
+    Unlike LegT there is no ZOH discretization: A and B are the *continuous*
+    matrices used directly in the forward-Euler step at episode step t:
+
+        m(t) = m(t-1) + (1/t) * (-A @ m(t-1) + B * u(t-1))
+
+    The step size 1/t is data-independent and computed at runtime from the
+    episode counter stored in the cell state.
+
+    Key property: the degree-0 coefficient tracks the *exact* running mean
+    over the episode (verified by induction: m₀(t) = (1/t)·Σᵢu(i)).
+
+    A: (d, d)  lower-triangular (diagonal + below)
+    B: (d, 1)
+    """
+    d = memory_size
+    n = torch.arange(d, dtype=torch.float64)         # 0, 1, ..., d-1
+    i, j = torch.meshgrid(n, n, indexing="ij")       # both (d, d)
+
+    # A[n,k] = sqrt((2n+1)(2k+1)) for k < n, (n+1) on diagonal, 0 above.
+    A = torch.where(
+        i > j,
+        ((2 * i + 1) * (2 * j + 1)).sqrt(),
+        torch.where(i == j, i + 1.0, torch.zeros_like(i)),
+    )                                                 # (d, d)
+
+    B = (2 * n + 1).sqrt().unsqueeze(1)              # (d, 1)
+
+    return A.to(torch.float32), B.to(torch.float32)
+
+
 def _legt_zoh_matrices(memory_size: int, theta: float) -> tuple[Tensor, Tensor]:
     """Build continuous HiPPO-LegT (A, B) per Voelker 2019 Eq. 2,
     then ZOH-discretize at dt=1. Returns (A_d, B_d) as float32 tensors.

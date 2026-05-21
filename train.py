@@ -50,6 +50,7 @@ import yaml
 from stable_baselines3.common.callbacks import EvalCallback
 
 from memrl.cell import (
+    DTHLMU,
     GRU,
     LMU,
     LSTM,
@@ -81,6 +82,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "mLSTM": mLSTM,
     "GatedLMU": GatedLMU,
     "SelectiveLMU": SelectiveLMU,
+    "DTHLMU": DTHLMU,
     "SHM": SHM,
 }
 
@@ -100,6 +102,8 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "GatedLMU":          {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum"},
     "SelectiveLMU":      {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum",
                           "n_scales": 3, "scale_factor": 2.0, "readout_skip_scale": 0.1},
+    "DTHLMU":            {"memory_size": 32, "theta": 100.0, "n_scales": 3,
+                          "scale_factor": 2.0, "assoc_size": 64},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
 }
 

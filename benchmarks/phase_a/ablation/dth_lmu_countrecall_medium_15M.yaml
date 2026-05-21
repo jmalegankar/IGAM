@@ -1,0 +1,41 @@
+# 15M suite — DTH-LMU on CountRecallMedium.
+# LegS degree-0 = exact running mean over the full episode → precise count statistics.
+# θ=100 → θ_s = 100²/32 = 312: slow LegT covers ~300 steps (half of ~600 ep length).
+# LR matches GatedLMU no-gate config (gate OFF helped CRM; DTH-LMU gate is selective,
+# so we keep it but start from the faster LR that worked for CRM).
+
+env_name: popgym-CountRecallMedium-v0
+n_envs: 8
+
+total_timesteps: 15_000_000
+
+seed: 0
+
+cell:
+  name: DTHLMU
+  kwargs:
+    memory_size: 32
+    theta: 100.0
+    n_scales: 3
+    scale_factor: 2.0
+    assoc_size: 64
+    residual_scale: 0.05
+    readout_skip_scale: 0.1
+
+encoder_dim: 64
+encoder_hidden: 128
+
+lr: 2.0e-4
+target_kl: 0.03
+
+n_steps: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+chunk_len: 32
+n_chunks_per_batch: 8

@@ -1,7 +1,8 @@
-# Ablation: vanilla LMU (Voelker 2019). No gate, no ortho W_pre, no dynamic
-# readout, no residual. Scalar u_t, additive write, static pooling over memory.
-# Uses the LMU cell class directly (not GatedLMU with everything off).
-# Expected: learns with E3B driving exploration, but slower than full GatedLMU.
+# Ablation: vanilla LMU (Voelker 2019).
+# No gate, no multichannel, no ortho W_pre, no dynamic readout, no residual.
+# Uses the LMU cell class directly — scalar u_t, additive write, static C readout.
+# Tests whether phiRand E3B alone is sufficient with a vanilla memory cell.
+# Expected: converges with E3B driving exploration, but slower than full GatedLMU.
 env_name: MiniGrid-MemoryS13-v0
 n_envs: 16
 total_timesteps: 5_000_000
@@ -11,10 +12,10 @@ cell:
   name: LMU
   kwargs:
     memory_size: 64
-    theta: 100.0
+    theta: 200.0
 
-encoder_dim: 64
-encoder_hidden: 128
+encoder_dim: 128
+encoder_hidden: 256
 
 lr: 3.0e-4
 n_steps: 512
@@ -23,12 +24,12 @@ gamma: 0.999
 gae_lambda: 0.98
 clip_range: 0.2
 ent_coef: 0.008
-vf_coef: 0.5
+vf_coef: 1.0
 max_grad_norm: 0.5
 target_kl: 0.05
 
 chunk_len: 16
-n_chunks_per_batch: 16
+n_chunks_per_batch: 32
 
 use_wrapper: false
 beta_ep: 0.1

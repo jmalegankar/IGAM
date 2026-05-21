@@ -1,6 +1,9 @@
-# Ablation: no gate (gate_type=none). Residual also disabled — it's only
-# meaningful when gating can cause memory collapse; without a gate, writes
-# are always u_x + pred so there's no collapse mechanism to prevent.
+# Ablation: no gate (gate_type=none).
+# Residual also disabled — it prevents write collapse that only occurs with a gate;
+# without gating every step writes u_x + pred so there is no collapse mode.
+# W_pre is also not instantiated when gate_type=none (cell skips it).
+# All other components (multichannel, W_query, ortho W_pre) stay ON to isolate
+# the gate contribution cleanly.
 env_name: MiniGrid-MemoryS13-v0
 n_envs: 16
 total_timesteps: 5_000_000
@@ -10,14 +13,15 @@ cell:
   name: GatedLMU
   kwargs:
     memory_size: 64
-    theta: 100.0
-    gate_type: none               # gate OFF (residual auto-disabled by cell)
-    residual_scale: 0.0
+    theta: 200.0
+    gate_type: none               # gate OFF
+    residual_scale: 0.0           # residual meaningless without gate
+    multichannel: true
     dynamic_readout: true
-    orthogonal_W_pre: true
+    orthogonal_W_pre: false       # W_pre not created when gate_type=none
 
-encoder_dim: 64
-encoder_hidden: 128
+encoder_dim: 128
+encoder_hidden: 256
 
 lr: 3.0e-4
 n_steps: 512
@@ -26,12 +30,12 @@ gamma: 0.999
 gae_lambda: 0.98
 clip_range: 0.2
 ent_coef: 0.008
-vf_coef: 0.5
+vf_coef: 1.0
 max_grad_norm: 0.5
 target_kl: 0.05
 
 chunk_len: 16
-n_chunks_per_batch: 16
+n_chunks_per_batch: 32
 
 use_wrapper: false
 beta_ep: 0.1

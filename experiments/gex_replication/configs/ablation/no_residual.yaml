@@ -1,7 +1,7 @@
 # Ablation: no anti-collapse residual (residual_scale=0). Gate is still ON.
-# Risk: as E_h learns to predict u_x, the innovation (gate * innov) → 0
-# and memory stops updating. The residual prevents this by adding a small
-# direct u_x signal even when the predictive-coding gate is fully closed.
+# Risk: as E_h learns to predict u_x, the innovation → 0 and the gated write
+# converges to u_actual ≈ pred. Memory stops receiving new information.
+# The residual injects a small fixed fraction of u_x.detach() to prevent this.
 env_name: MiniGrid-MemoryS13-v0
 n_envs: 16
 total_timesteps: 5_000_000
@@ -11,14 +11,15 @@ cell:
   name: GatedLMU
   kwargs:
     memory_size: 64
-    theta: 100.0
+    theta: 200.0
     gate_type: softsign_sum
     residual_scale: 0.0           # anti-collapse residual OFF
+    multichannel: true
     dynamic_readout: true
     orthogonal_W_pre: true
 
-encoder_dim: 64
-encoder_hidden: 128
+encoder_dim: 128
+encoder_hidden: 256
 
 lr: 3.0e-4
 n_steps: 512
@@ -27,12 +28,12 @@ gamma: 0.999
 gae_lambda: 0.98
 clip_range: 0.2
 ent_coef: 0.008
-vf_coef: 0.5
+vf_coef: 1.0
 max_grad_norm: 0.5
 target_kl: 0.05
 
 chunk_len: 16
-n_chunks_per_batch: 16
+n_chunks_per_batch: 32
 
 use_wrapper: false
 beta_ep: 0.1

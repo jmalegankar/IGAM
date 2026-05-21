@@ -1,8 +1,9 @@
-# Ablation: no dynamic W_query.
-# Uses fixed static pooling over Legendre coefficients (W_static: Linear(D, 1))
-# instead of the attention pointer C_t = normalize(W_query(h)).
-# The policy can no longer attend to different Legendre orders depending on
-# context (e.g. low-freq hint storage vs high-freq recent history at junction).
+# Ablation: no multichannel (scalar u, C=1).
+# The innovation vector collapses to a scalar — the original GEX motivation
+# (C-dim phi_innov) disappears. E3B still uses phi_rand so exploration is
+# unaffected; this isolates the memory-capacity / innovation-richness
+# contribution of the multichannel design.
+# e_x_scalar (Linear(input_size, 1)) replaces the per-channel e_x parameter.
 env_name: MiniGrid-MemoryS13-v0
 n_envs: 16
 total_timesteps: 5_000_000
@@ -15,8 +16,8 @@ cell:
     theta: 200.0
     gate_type: softsign_sum
     residual_scale: 0.05
-    multichannel: true
-    dynamic_readout: false        # W_query OFF → W_static fixed pooling
+    multichannel: false           # scalar u — matches canonical LMU bandwidth
+    dynamic_readout: true
     orthogonal_W_pre: true
 
 encoder_dim: 128

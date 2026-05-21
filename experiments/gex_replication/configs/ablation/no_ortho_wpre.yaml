@@ -1,6 +1,9 @@
-# Ablation: no orthogonal W_pre. Uses plain Linear instead of exact isometry.
-# W_pre loses its norm-preserving property; innovation magnitudes are no longer
-# directly comparable across steps (||W_pre(gate+innov)|| ≠ ||gate+innov||).
+# Ablation: no orthogonal W_pre constraint.
+# W_pre is still present and learned, but initialized to identity and allowed
+# to drift freely under Adam — loses the isometry guarantee over training.
+# Expected: similar peak performance, potentially less stable across seeds
+# (singular values can grow, introducing a learned scale into the memory
+# pathway that interacts with the fixed HiPPO dynamics).
 env_name: MiniGrid-MemoryS13-v0
 n_envs: 16
 total_timesteps: 5_000_000
@@ -10,14 +13,15 @@ cell:
   name: GatedLMU
   kwargs:
     memory_size: 64
-    theta: 100.0
+    theta: 200.0
     gate_type: softsign_sum
     residual_scale: 0.05
+    multichannel: true
     dynamic_readout: true
-    orthogonal_W_pre: false       # exact isometry OFF
+    orthogonal_W_pre: false       # W_pre unconstrained (identity init, free Adam)
 
-encoder_dim: 64
-encoder_hidden: 128
+encoder_dim: 128
+encoder_hidden: 256
 
 lr: 3.0e-4
 n_steps: 512
@@ -26,12 +30,12 @@ gamma: 0.999
 gae_lambda: 0.98
 clip_range: 0.2
 ent_coef: 0.008
-vf_coef: 0.5
+vf_coef: 1.0
 max_grad_norm: 0.5
 target_kl: 0.05
 
 chunk_len: 16
-n_chunks_per_batch: 16
+n_chunks_per_batch: 32
 
 use_wrapper: false
 beta_ep: 0.1

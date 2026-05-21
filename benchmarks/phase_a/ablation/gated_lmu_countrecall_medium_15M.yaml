@@ -15,7 +15,7 @@ cell:
   kwargs:
     memory_size: 128
     theta: 400.0
-    gate_type: softsign_sum
+    gate_type: none
 
 encoder_dim: 64
 encoder_hidden: 128
