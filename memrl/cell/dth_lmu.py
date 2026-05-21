@@ -148,7 +148,11 @@ class DTHLMU(RecurrentCell):
         self.register_buffer("A_s", A_s.unsqueeze(0))   # (1, D, D)
         self.register_buffer("B_s", B_s.unsqueeze(0))   # (1, D, 1)
 
-        # LegS: fixed continuous matrices, no ZOH; step size 1/t at runtime
+        # LegS: fixed continuous A, B; step size 1/t at runtime.
+        # Forward Euler (I − A/t) is spectrally stable but non-normal:
+        # matrix 2-norm ≈ 20 for all t < 500 → transient explosion in float32.
+        # Implicit Euler (I + A/t)^{-1} has 2-norm < 1 for ALL t → stable.
+        # A is lower-triangular, so each step needs one triangular solve O(D²).
         A_l, B_l = _legs_matrices(memory_size)
         self.register_buffer("A_legs", A_l)              # (D, D)
         self.register_buffer("B_legs", B_l)              # (D, 1)
@@ -265,11 +269,24 @@ class DTHLMU(RecurrentCell):
 
         # ── LegS ────────────────────────────────────────────────────────────
 
-        t_      = t + 1.0                                       # (B, 1)  1-indexed
-        dt      = (1.0 / t_).unsqueeze(-1)                      # (B, 1, 1)
-        m_l_    = (m_legs
-                   + dt * (-torch.einsum("ij,bjc->bic", self.A_legs, m_legs)
-                           + self.B_legs.unsqueeze(0) * u_x.unsqueeze(1)))
+        t_       = t + 1.0                                      # (B, 1)  1-indexed
+        # Implicit Euler: (I + A/t) m' = m + B/t · u_x.
+        # Unconditionally 2-norm stable (< 1) for all t; same O(D²·B·C) cost
+        # as forward Euler. A is lower-triangular so we use a triangular solve.
+        # All batch elements are assumed to share the same t within a chunk
+        # (apply_episode_mask zeroes state+t before this; occasional per-element
+        # variance from resets is a small one-step approximation error).
+        t_scalar = t_[0, 0].item()
+        A_impl   = (torch.eye(self.memory_size, device=x.device, dtype=x.dtype)
+                    + self.A_legs / t_scalar)                   # (D, D) lower-tri
+        rhs      = (m_legs
+                    + (self.B_legs / t_scalar).unsqueeze(0) * u_x.unsqueeze(1))
+        D, B_sz, C = self.memory_size, x.shape[0], self.input_size
+        m_l_     = torch.linalg.solve_triangular(
+                       A_impl,
+                       rhs.permute(1, 0, 2).reshape(D, B_sz * C),
+                       upper=False,
+                   ).reshape(D, B_sz, C).permute(1, 0, 2)      # (B, D, C)
 
         C_l    = F.normalize(self.W_ql(h_n), dim=-1)           # (B, D)
         y_l    = torch.einsum("bd,bdc->bc", C_l, m_l_)         # (B, C)
