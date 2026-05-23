@@ -25,3 +25,4 @@ runs/
 .vscode/
 *.swp
 plots/
+.claude

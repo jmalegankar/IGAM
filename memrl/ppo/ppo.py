@@ -205,14 +205,20 @@ class MemPPO(PPO):
         callback.on_rollout_start()
 
         # Per-step diagnostic accumulators.
-        innovation_buf: list[float] = []
-        state_norm_buf: list[dict[str, float]] = []
+        # PERF: keep these as GPU tensors and stack once at end of rollout
+        # rather than .item()-ing each step. A .item() call forces a GPU→CPU
+        # sync which serializes the entire pipeline — previously this loop
+        # did 14 syncs per env step (12 state norms + 2 innovation), which
+        # alone was ~30% of rollout wall time on the 3070 Ti. Now we do one
+        # sync per rollout. See PR notes 2026-05-23.
+        innovation_buf_t:   list[th.Tensor] = []
+        innov_per_env_buf:  list[th.Tensor] = []
+        state_keys: tuple[str, ...] | None = None  # set on first iter
+        state_norm_rows_t:  list[th.Tensor] = []
         action_dist_buf: list[np.ndarray] = []
-        # Per-phase innovation magnitudes — only populated for envs that
-        # surface info["phase"] (e.g. Autoencode via ExposePhaseInInfo). For
-        # envs without a phase signal the dict stays empty and no extra
-        # scalars are emitted to TB.
-        innovation_per_phase: dict[int, list[float]] = {}
+        # Per-step phase ids (parallel to innov_per_env_buf), so we can bucket
+        # at end-of-rollout in one pass. Phase is small int already on CPU.
+        phase_per_step: list[np.ndarray | None] = []
 
         n_steps = 0
         while n_steps < n_rollout_steps:
@@ -229,18 +235,18 @@ class MemPPO(PPO):
                     obs_t, self._cell_state, episode_start=es,
                 )
 
-                # Diagnostics
+                # Diagnostics — accumulate GPU tensors only; drain at rollout end.
                 if "innovation" in side:
-                    innovation_buf.append(
-                        side["innovation"].abs().mean().item()
-                    )
-                    # Per-env innovation magnitude, for later phase-grouped logging.
-                    innov_per_env = side["innovation"].abs().mean(dim=-1).cpu().numpy()
+                    innov_abs = side["innovation"].abs()
+                    innovation_buf_t.append(innov_abs.mean())             # scalar GPU
+                    innov_per_env_buf.append(innov_abs.mean(dim=-1))      # (n_envs,) GPU
                 else:
-                    innov_per_env = None
-                state_norm_buf.append({
-                    k: v.norm().item() for k, v in new_state.items()
-                })
+                    innov_per_env_buf.append(None)  # placeholder for indexing
+                if state_keys is None:
+                    state_keys = tuple(new_state.keys())
+                state_norm_rows_t.append(th.stack([
+                    new_state[k].norm() for k in state_keys
+                ]))                                                       # (K,) GPU
 
             actions_np = actions.cpu().numpy()
             new_obs, rewards, dones, infos = env.step(actions_np)
@@ -253,19 +259,17 @@ class MemPPO(PPO):
             self._update_info_buffer(infos, dones)
             action_dist_buf.append(actions_np.copy())
 
-            # Bucket per-env innovation by info["phase"] when the env exposes it.
-            # Off-by-one note: `infos` corresponds to new_obs (the step the env
-            # transitioned INTO); we treat that as a sufficient proxy for the
-            # phase of self._last_obs (the obs the cell actually consumed when
-            # producing this step's innovation). At most one boundary-step is
-            # mis-tagged per episode, which is negligible for aggregate stats.
-            if innov_per_env is not None:
+            # Cache phase ids per env (cheap; ints on CPU). Bucketing into
+            # per-phase mean innovation happens after the rollout when we
+            # drain innov_per_env_buf to numpy in a single transfer.
+            if innov_per_env_buf[-1] is not None:
+                ph = np.full(env.num_envs, -1, dtype=np.int64)
                 for env_idx, info in enumerate(infos):
                     if "phase" in info:
-                        phase = int(info["phase"])
-                        innovation_per_phase.setdefault(phase, []).append(
-                            float(innov_per_env[env_idx])
-                        )
+                        ph[env_idx] = int(info["phase"])
+                phase_per_step.append(ph)
+            else:
+                phase_per_step.append(None)
 
             # Action storage convention (matches SB3 RolloutBuffer for Discrete:
             # (n_envs, 1) float arrays).
@@ -303,31 +307,44 @@ class MemPPO(PPO):
         rollout_buffer.compute_returns_and_advantage(values, dones)
 
         # ── per-rollout diagnostics ────────────────────────────────────
-        if innovation_buf:
-            self.logger.record(
-                "debug/innovation_mag_mean", float(np.mean(innovation_buf))
-            )
-            self.logger.record(
-                "debug/innovation_mag_max", float(np.max(innovation_buf))
-            )
+        # Single GPU→CPU drain at end-of-rollout (vs. 14 per-step syncs
+        # previously). The stacks are tiny (~n_steps × <20 scalars) so the
+        # transfer cost is negligible compared to the saved sync overhead.
+        if innovation_buf_t:
+            innovation_arr = th.stack(innovation_buf_t).cpu().numpy()
+            self.logger.record("debug/innovation_mag_mean", float(innovation_arr.mean()))
+            self.logger.record("debug/innovation_mag_max",  float(innovation_arr.max()))
+
         # Phase-grouped innovation (only for envs that expose info["phase"]).
         # Autoencode reports phase∈{0:WATCH, 1:PLAY}; the WATCH/PLAY ratio of
         # innovation magnitudes is the interpretability signal we want.
-        for phase, vals in innovation_per_phase.items():
-            self.logger.record(
-                f"debug/innovation_mag_phase_{phase}_mean", float(np.mean(vals))
-            )
-            self.logger.record(
-                f"debug/innovation_mag_phase_{phase}_count", int(len(vals))
-            )
-        for key in state_norm_buf[0]:
-            values_per_step = [s[key] for s in state_norm_buf]
-            self.logger.record(
-                f"debug/state_{key}_norm_mean", float(np.mean(values_per_step))
-            )
-            self.logger.record(
-                f"debug/state_{key}_norm_max", float(np.max(values_per_step))
-            )
+        any_phase = any(p is not None for p in phase_per_step)
+        if any_phase and innov_per_env_buf and innov_per_env_buf[0] is not None:
+            # Drain per-env innovation in one shot, then bucket on CPU.
+            ipe = th.stack([t for t in innov_per_env_buf if t is not None]).cpu().numpy()
+            # phase array stacks parallel to ipe (only the steps with a tensor).
+            ph_rows = np.stack([p for p in phase_per_step if p is not None])
+            per_phase: dict[int, list[float]] = {}
+            for step_i in range(ipe.shape[0]):
+                for env_i in range(ipe.shape[1]):
+                    p = int(ph_rows[step_i, env_i])
+                    if p >= 0:
+                        per_phase.setdefault(p, []).append(float(ipe[step_i, env_i]))
+            for phase, vals in per_phase.items():
+                self.logger.record(
+                    f"debug/innovation_mag_phase_{phase}_mean", float(np.mean(vals))
+                )
+                self.logger.record(
+                    f"debug/innovation_mag_phase_{phase}_count", int(len(vals))
+                )
+
+        if state_norm_rows_t and state_keys is not None:
+            # shape: (n_steps, K)
+            norms_arr = th.stack(state_norm_rows_t).cpu().numpy()
+            for i, key in enumerate(state_keys):
+                col = norms_arr[:, i]
+                self.logger.record(f"debug/state_{key}_norm_mean", float(col.mean()))
+                self.logger.record(f"debug/state_{key}_norm_max",  float(col.max()))
 
         # Action histogram diagnostic (entropy is also tracked in train()
         # losses; this gives the raw distribution).

@@ -1,0 +1,1875 @@
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+C:\Users\jaima\OneDrive\Documents\research\IGAM\.venv\Lib\site-packages\stable_baselines3\common\utils.py:166: UserWarning: get_schedule_fn() is deprecated, please use FloatSchedule() instead
+  warnings.warn("get_schedule_fn() is deprecated, please use FloatSchedule() instead")
+C:\Users\jaima\OneDrive\Documents\research\IGAM\.venv\Lib\site-packages\stable_baselines3\common\utils.py:212: UserWarning: constant_fn() is deprecated, please use ConstantSchedule() instead
+  warnings.warn("constant_fn() is deprecated, please use ConstantSchedule() instead")
+  perf: device=NVIDIA GeForce RTX 3070 Ti tf32=True cudnn_benchmark=True torch_threads=8
+Run dir: runs\dth_lmu_ablations\dth_lmu_autoencode_medium_additive_5M\DTHLMU\seed_1_20260523_144531
+Using cuda device
+  perf: MEMRL_COMPILE=1 requested but `triton` is not installed (Triton wheels for Windows are unreliable). Proceeding uncompiled — unset MEMRL_COMPILE or install triton-windows to silence this notice.
+Logging to runs\dth_lmu_ablations\dth_lmu_autoencode_medium_additive_5M\DTHLMU\seed_1_20260523_144531\PPO_1
+  cell=DTHLMU (×2: separate actor/critic backbones)  params=214,609  chunk_len=32  n_chunks_per_batch=8
+  cell state shapes: actor_h=(64,), actor_m_f=(3, 32, 64), actor_m_s=(1, 32, 64), actor_m_legs=(32, 64), actor_t=(1,), actor_M=(128, 128), critic_h=(64,), critic_m_f=(3, 32, 64), critic_m_s=(1, 32, 64), critic_m_legs=(32, 64), critic_t=(1,), critic_M=(128, 128)
+  checkpoint: save_path=runs\dth_lmu_ablations\dth_lmu_autoencode_medium_additive_5M\DTHLMU\seed_1_20260523_144531, save_freq_steps=50,000, stop_files=['runs\\dth_lmu_ablations\\dth_lmu_autoencode_medium_additive_5M\\DTHLMU\\seed_1_20260523_144531\\STOP', 'C:\\Users\\jaima\\OneDrive\\Documents\\research\\IGAM\\STOP']
+Eval num_timesteps=8192, episode_reward=-0.53 +/- 0.07
+Episode length: 207.00 +/- 0.00
+---------------------------------
+| eval/              |          |
+|    mean_ep_length  | 207      |
+|    mean_reward     | -0.535   |
+| time/              |          |
+|    total_timesteps | 8192     |
+---------------------------------
+New best mean reward!
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.247    |
+|    action_frac_1                 | 0.251    |
+|    action_frac_2                 | 0.255    |
+|    action_frac_3                 | 0.247    |
+|    innovation_mag_max            | 0.407    |
+|    innovation_mag_mean           | 0.367    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.362    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.372    |
+|    state_actor_M_norm_max        | 29.9     |
+|    state_actor_M_norm_mean       | 15.6     |
+|    state_actor_h_norm_max        | 18.7     |
+|    state_actor_h_norm_mean       | 18       |
+|    state_actor_m_f_norm_max      | 86       |
+|    state_actor_m_f_norm_mean     | 73       |
+|    state_actor_m_legs_norm_max   | 3.1      |
+|    state_actor_m_legs_norm_mean  | 2.92     |
+|    state_actor_m_s_norm_max      | 3.54     |
+|    state_actor_m_s_norm_mean     | 2.56     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 291      |
+|    state_critic_M_norm_max       | 36.3     |
+|    state_critic_M_norm_mean      | 16.6     |
+|    state_critic_h_norm_max       | 19       |
+|    state_critic_h_norm_mean      | 17.9     |
+|    state_critic_m_f_norm_max     | 92.9     |
+|    state_critic_m_f_norm_mean    | 78.7     |
+|    state_critic_m_legs_norm_max  | 3.43     |
+|    state_critic_m_legs_norm_mean | 3.19     |
+|    state_critic_m_s_norm_max     | 4.21     |
+|    state_critic_m_s_norm_mean    | 2.87     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 291      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.495   |
+| time/                            |          |
+|    fps                           | 235      |
+|    iterations                    | 1        |
+|    time_elapsed                  | 34       |
+|    total_timesteps               | 8192     |
+-----------------------------------------------
+Eval num_timesteps=16384, episode_reward=-0.50 +/- 0.01
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.502   |
+| grad/                  |          |
+|    actor_norm          | 0.681    |
+|    cell_actor_norm     | 1.07e+06 |
+|    cell_critic_norm    | 1.58e+07 |
+|    critic_norm         | 0.8      |
+|    encoder_actor_norm  | 0.105    |
+|    encoder_critic_norm | 0.554    |
+| time/                  |          |
+|    total_timesteps     | 16384    |
+| train/                 |          |
+|    approx_kl           | 0.000602 |
+|    clip_fraction       | 0        |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.39    |
+|    explained_variance  | -33.4    |
+|    grad_norm           | 1.58e+07 |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 128      |
+|    policy_loss         | -0.00119 |
+|    value_loss          | 0.056    |
+-------------------------------------
+New best mean reward!
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.233    |
+|    action_frac_1                 | 0.244    |
+|    action_frac_2                 | 0.265    |
+|    action_frac_3                 | 0.259    |
+|    innovation_mag_max            | 0.406    |
+|    innovation_mag_mean           | 0.378    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.378    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.378    |
+|    state_actor_M_norm_max        | 29.9     |
+|    state_actor_M_norm_mean       | 15.6     |
+|    state_actor_h_norm_max        | 18.9     |
+|    state_actor_h_norm_mean       | 18.2     |
+|    state_actor_m_f_norm_max      | 101      |
+|    state_actor_m_f_norm_mean     | 81.8     |
+|    state_actor_m_legs_norm_max   | 3.12     |
+|    state_actor_m_legs_norm_mean  | 2.95     |
+|    state_actor_m_s_norm_max      | 3.56     |
+|    state_actor_m_s_norm_mean     | 2.58     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 292      |
+|    state_critic_M_norm_max       | 36.5     |
+|    state_critic_M_norm_mean      | 16.8     |
+|    state_critic_h_norm_max       | 19.4     |
+|    state_critic_h_norm_mean      | 18.7     |
+|    state_critic_m_f_norm_max     | 86       |
+|    state_critic_m_f_norm_mean    | 74.3     |
+|    state_critic_m_legs_norm_max  | 3.49     |
+|    state_critic_m_legs_norm_mean | 3.27     |
+|    state_critic_m_s_norm_max     | 4.33     |
+|    state_critic_m_s_norm_mean    | 2.94     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 292      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.499   |
+| time/                            |          |
+|    fps                           | 95       |
+|    iterations                    | 2        |
+|    time_elapsed                  | 172      |
+|    total_timesteps               | 16384    |
+-----------------------------------------------
+Eval num_timesteps=24576, episode_reward=-0.48 +/- 0.11
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.485   |
+| grad/                  |          |
+|    actor_norm          | 0.637    |
+|    cell_actor_norm     | 0.301    |
+|    cell_critic_norm    | 0.0843   |
+|    critic_norm         | 0.168    |
+|    encoder_actor_norm  | 0.0697   |
+|    encoder_critic_norm | 0.1      |
+| time/                  |          |
+|    total_timesteps     | 24576    |
+| train/                 |          |
+|    approx_kl           | 0.00158  |
+|    clip_fraction       | 0.00058  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | -2.57    |
+|    grad_norm           | 0.725    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 256      |
+|    policy_loss         | -0.00218 |
+|    value_loss          | 0.00273  |
+-------------------------------------
+New best mean reward!
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.211    |
+|    action_frac_1                 | 0.249    |
+|    action_frac_2                 | 0.282    |
+|    action_frac_3                 | 0.258    |
+|    innovation_mag_max            | 0.403    |
+|    innovation_mag_mean           | 0.366    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.358    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.374    |
+|    state_actor_M_norm_max        | 30.1     |
+|    state_actor_M_norm_mean       | 15.9     |
+|    state_actor_h_norm_max        | 19       |
+|    state_actor_h_norm_mean       | 18.2     |
+|    state_actor_m_f_norm_max      | 99.6     |
+|    state_actor_m_f_norm_mean     | 70.9     |
+|    state_actor_m_legs_norm_max   | 3.15     |
+|    state_actor_m_legs_norm_mean  | 3.01     |
+|    state_actor_m_s_norm_max      | 3.63     |
+|    state_actor_m_s_norm_mean     | 2.62     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 292      |
+|    state_critic_M_norm_max       | 36.8     |
+|    state_critic_M_norm_mean      | 17       |
+|    state_critic_h_norm_max       | 19.3     |
+|    state_critic_h_norm_mean      | 18.8     |
+|    state_critic_m_f_norm_max     | 85.1     |
+|    state_critic_m_f_norm_mean    | 72.7     |
+|    state_critic_m_legs_norm_max  | 3.51     |
+|    state_critic_m_legs_norm_mean | 3.29     |
+|    state_critic_m_s_norm_max     | 4.35     |
+|    state_critic_m_s_norm_mean    | 2.96     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 292      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.501   |
+| time/                            |          |
+|    fps                           | 79       |
+|    iterations                    | 3        |
+|    time_elapsed                  | 310      |
+|    total_timesteps               | 24576    |
+-----------------------------------------------
+Eval num_timesteps=32768, episode_reward=-0.51 +/- 0.07
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.513   |
+| grad/                  |          |
+|    actor_norm          | 0.689    |
+|    cell_actor_norm     | 0.323    |
+|    cell_critic_norm    | 0.0523   |
+|    critic_norm         | 0.0892   |
+|    encoder_actor_norm  | 0.0849   |
+|    encoder_critic_norm | 0.0524   |
+| time/                  |          |
+|    total_timesteps     | 32768    |
+| train/                 |          |
+|    approx_kl           | 0.000868 |
+|    clip_fraction       | 0.00388  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.228    |
+|    grad_norm           | 0.738    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 384      |
+|    policy_loss         | -0.00166 |
+|    value_loss          | 0.00107  |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.199    |
+|    action_frac_1                 | 0.275    |
+|    action_frac_2                 | 0.28     |
+|    action_frac_3                 | 0.246    |
+|    innovation_mag_max            | 0.4      |
+|    innovation_mag_mean           | 0.366    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.359    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.373    |
+|    state_actor_M_norm_max        | 30.4     |
+|    state_actor_M_norm_mean       | 15.9     |
+|    state_actor_h_norm_max        | 18.9     |
+|    state_actor_h_norm_mean       | 18.3     |
+|    state_actor_m_f_norm_max      | 83.3     |
+|    state_actor_m_f_norm_mean     | 68.9     |
+|    state_actor_m_legs_norm_max   | 3.12     |
+|    state_actor_m_legs_norm_mean  | 2.99     |
+|    state_actor_m_s_norm_max      | 3.61     |
+|    state_actor_m_s_norm_mean     | 2.61     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 292      |
+|    state_critic_M_norm_max       | 36.8     |
+|    state_critic_M_norm_mean      | 17.1     |
+|    state_critic_h_norm_max       | 19.4     |
+|    state_critic_h_norm_mean      | 18.9     |
+|    state_critic_m_f_norm_max     | 83.6     |
+|    state_critic_m_f_norm_mean    | 71.8     |
+|    state_critic_m_legs_norm_max  | 3.51     |
+|    state_critic_m_legs_norm_mean | 3.3      |
+|    state_critic_m_s_norm_max     | 4.36     |
+|    state_critic_m_s_norm_mean    | 2.97     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 292      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.493   |
+| time/                            |          |
+|    fps                           | 72       |
+|    iterations                    | 4        |
+|    time_elapsed                  | 453      |
+|    total_timesteps               | 32768    |
+-----------------------------------------------
+Eval num_timesteps=40960, episode_reward=-0.48 +/- 0.05
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.483   |
+| grad/                  |          |
+|    actor_norm          | 0.654    |
+|    cell_actor_norm     | 5.64     |
+|    cell_critic_norm    | 0.0421   |
+|    critic_norm         | 0.0695   |
+|    encoder_actor_norm  | 1.46     |
+|    encoder_critic_norm | 0.041    |
+| time/                  |          |
+|    total_timesteps     | 40960    |
+| train/                 |          |
+|    approx_kl           | 0.00125  |
+|    clip_fraction       | 0.0122   |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.418    |
+|    grad_norm           | 5.83     |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 512      |
+|    policy_loss         | -0.00143 |
+|    value_loss          | 0.000874 |
+-------------------------------------
+New best mean reward!
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.198    |
+|    action_frac_1                 | 0.29     |
+|    action_frac_2                 | 0.261    |
+|    action_frac_3                 | 0.25     |
+|    innovation_mag_max            | 0.398    |
+|    innovation_mag_mean           | 0.369    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.369    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.369    |
+|    state_actor_M_norm_max        | 30.2     |
+|    state_actor_M_norm_mean       | 15.8     |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.4     |
+|    state_actor_m_f_norm_max      | 89.6     |
+|    state_actor_m_f_norm_mean     | 76.7     |
+|    state_actor_m_legs_norm_max   | 3.15     |
+|    state_actor_m_legs_norm_mean  | 3        |
+|    state_actor_m_s_norm_max      | 3.6      |
+|    state_actor_m_s_norm_mean     | 2.61     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 293      |
+|    state_critic_M_norm_max       | 36.9     |
+|    state_critic_M_norm_mean      | 17.1     |
+|    state_critic_h_norm_max       | 19.5     |
+|    state_critic_h_norm_mean      | 18.9     |
+|    state_critic_m_f_norm_max     | 82.3     |
+|    state_critic_m_f_norm_mean    | 71.1     |
+|    state_critic_m_legs_norm_max  | 3.52     |
+|    state_critic_m_legs_norm_mean | 3.33     |
+|    state_critic_m_s_norm_max     | 4.35     |
+|    state_critic_m_s_norm_mean    | 2.98     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 293      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.496   |
+| time/                            |          |
+|    fps                           | 68       |
+|    iterations                    | 5        |
+|    time_elapsed                  | 599      |
+|    total_timesteps               | 40960    |
+-----------------------------------------------
+Eval num_timesteps=49152, episode_reward=-0.48 +/- 0.03
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.483    |
+| grad/                  |           |
+|    actor_norm          | 0.662     |
+|    cell_actor_norm     | 12.4      |
+|    cell_critic_norm    | 0.0431    |
+|    critic_norm         | 0.0689    |
+|    encoder_actor_norm  | 3.32      |
+|    encoder_critic_norm | 0.0399    |
+| time/                  |           |
+|    total_timesteps     | 49152     |
+| train/                 |           |
+|    approx_kl           | 0.00187   |
+|    clip_fraction       | 0.00726   |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.38     |
+|    explained_variance  | 0.547     |
+|    grad_norm           | 12.7      |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 640       |
+|    policy_loss         | -0.000921 |
+|    value_loss          | 0.000738  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.204    |
+|    action_frac_1                 | 0.276    |
+|    action_frac_2                 | 0.255    |
+|    action_frac_3                 | 0.265    |
+|    innovation_mag_max            | 0.399    |
+|    innovation_mag_mean           | 0.375    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.38     |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.37     |
+|    state_actor_M_norm_max        | 30       |
+|    state_actor_M_norm_mean       | 15.8     |
+|    state_actor_h_norm_max        | 19       |
+|    state_actor_h_norm_mean       | 18.3     |
+|    state_actor_m_f_norm_max      | 93.9     |
+|    state_actor_m_f_norm_mean     | 76.2     |
+|    state_actor_m_legs_norm_max   | 3.15     |
+|    state_actor_m_legs_norm_mean  | 3.02     |
+|    state_actor_m_s_norm_max      | 3.61     |
+|    state_actor_m_s_norm_mean     | 2.62     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 293      |
+|    state_critic_M_norm_max       | 36.9     |
+|    state_critic_M_norm_mean      | 17.2     |
+|    state_critic_h_norm_max       | 19.5     |
+|    state_critic_h_norm_mean      | 19       |
+|    state_critic_m_f_norm_max     | 84       |
+|    state_critic_m_f_norm_mean    | 71.3     |
+|    state_critic_m_legs_norm_max  | 3.53     |
+|    state_critic_m_legs_norm_mean | 3.33     |
+|    state_critic_m_s_norm_max     | 4.37     |
+|    state_critic_m_s_norm_mean    | 2.99     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 293      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.49    |
+| time/                            |          |
+|    fps                           | 65       |
+|    iterations                    | 6        |
+|    time_elapsed                  | 745      |
+|    total_timesteps               | 49152    |
+-----------------------------------------------
+Eval num_timesteps=57344, episode_reward=-0.49 +/- 0.03
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.492   |
+| grad/                  |          |
+|    actor_norm          | 0.637    |
+|    cell_actor_norm     | 1.58     |
+|    cell_critic_norm    | 0.0409   |
+|    critic_norm         | 0.0607   |
+|    encoder_actor_norm  | 0.408    |
+|    encoder_critic_norm | 0.0354   |
+| time/                  |          |
+|    total_timesteps     | 57344    |
+| train/                 |          |
+|    approx_kl           | 0.0011   |
+|    clip_fraction       | 0.00717  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.616    |
+|    grad_norm           | 1.81     |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 768      |
+|    policy_loss         | -0.00111 |
+|    value_loss          | 0.000594 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.207    |
+|    action_frac_1                 | 0.285    |
+|    action_frac_2                 | 0.247    |
+|    action_frac_3                 | 0.262    |
+|    innovation_mag_max            | 0.407    |
+|    innovation_mag_mean           | 0.381    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.383    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.379    |
+|    state_actor_M_norm_max        | 30.1     |
+|    state_actor_M_norm_mean       | 16       |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.4     |
+|    state_actor_m_f_norm_max      | 96.6     |
+|    state_actor_m_f_norm_mean     | 78.3     |
+|    state_actor_m_legs_norm_max   | 3.14     |
+|    state_actor_m_legs_norm_mean  | 3.04     |
+|    state_actor_m_s_norm_max      | 3.62     |
+|    state_actor_m_s_norm_mean     | 2.64     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 293      |
+|    state_critic_M_norm_max       | 37       |
+|    state_critic_M_norm_mean      | 17.2     |
+|    state_critic_h_norm_max       | 19.6     |
+|    state_critic_h_norm_mean      | 19.1     |
+|    state_critic_m_f_norm_max     | 82.9     |
+|    state_critic_m_f_norm_mean    | 71       |
+|    state_critic_m_legs_norm_max  | 3.53     |
+|    state_critic_m_legs_norm_mean | 3.33     |
+|    state_critic_m_s_norm_max     | 4.38     |
+|    state_critic_m_s_norm_mean    | 2.99     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 293      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.48    |
+| time/                            |          |
+|    fps                           | 64       |
+|    iterations                    | 7        |
+|    time_elapsed                  | 890      |
+|    total_timesteps               | 57344    |
+-----------------------------------------------
+Eval num_timesteps=65536, episode_reward=-0.50 +/- 0.00
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.5     |
+| grad/                  |          |
+|    actor_norm          | 0.663    |
+|    cell_actor_norm     | 8.79     |
+|    cell_critic_norm    | 0.0465   |
+|    critic_norm         | 0.0685   |
+|    encoder_actor_norm  | 2.29     |
+|    encoder_critic_norm | 0.0402   |
+| time/                  |          |
+|    total_timesteps     | 65536    |
+| train/                 |          |
+|    approx_kl           | 0.00163  |
+|    clip_fraction       | 0.0114   |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.658    |
+|    grad_norm           | 9.08     |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 896      |
+|    policy_loss         | -0.00114 |
+|    value_loss          | 0.000588 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.213    |
+|    action_frac_1                 | 0.291    |
+|    action_frac_2                 | 0.227    |
+|    action_frac_3                 | 0.269    |
+|    innovation_mag_max            | 0.41     |
+|    innovation_mag_mean           | 0.386    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.39     |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.382    |
+|    state_actor_M_norm_max        | 30.9     |
+|    state_actor_M_norm_mean       | 16.3     |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.4     |
+|    state_actor_m_f_norm_max      | 93.8     |
+|    state_actor_m_f_norm_mean     | 75.5     |
+|    state_actor_m_legs_norm_max   | 3.33     |
+|    state_actor_m_legs_norm_mean  | 3.09     |
+|    state_actor_m_s_norm_max      | 3.72     |
+|    state_actor_m_s_norm_mean     | 2.69     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 294      |
+|    state_critic_M_norm_max       | 37.1     |
+|    state_critic_M_norm_mean      | 17.3     |
+|    state_critic_h_norm_max       | 19.7     |
+|    state_critic_h_norm_mean      | 19.1     |
+|    state_critic_m_f_norm_max     | 82.3     |
+|    state_critic_m_f_norm_mean    | 70.4     |
+|    state_critic_m_legs_norm_max  | 3.54     |
+|    state_critic_m_legs_norm_mean | 3.34     |
+|    state_critic_m_s_norm_max     | 4.4      |
+|    state_critic_m_s_norm_mean    | 3.01     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 294      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.486   |
+| time/                            |          |
+|    fps                           | 63       |
+|    iterations                    | 8        |
+|    time_elapsed                  | 1036     |
+|    total_timesteps               | 65536    |
+-----------------------------------------------
+Eval num_timesteps=73728, episode_reward=-0.50 +/- 0.01
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.504    |
+| grad/                  |           |
+|    actor_norm          | 0.642     |
+|    cell_actor_norm     | 0.102     |
+|    cell_critic_norm    | 0.0528    |
+|    critic_norm         | 0.0793    |
+|    encoder_actor_norm  | 0.0409    |
+|    encoder_critic_norm | 0.0458    |
+| time/                  |           |
+|    total_timesteps     | 73728     |
+| train/                 |           |
+|    approx_kl           | 0.000697  |
+|    clip_fraction       | 0         |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.38     |
+|    explained_variance  | 0.694     |
+|    grad_norm           | 0.642     |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 1024      |
+|    policy_loss         | -0.000881 |
+|    value_loss          | 0.000578  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.238    |
+|    action_frac_1                 | 0.285    |
+|    action_frac_2                 | 0.218    |
+|    action_frac_3                 | 0.259    |
+|    innovation_mag_max            | 0.414    |
+|    innovation_mag_mean           | 0.389    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.395    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.383    |
+|    state_actor_M_norm_max        | 30.8     |
+|    state_actor_M_norm_mean       | 16.2     |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.5     |
+|    state_actor_m_f_norm_max      | 90.6     |
+|    state_actor_m_f_norm_mean     | 77.3     |
+|    state_actor_m_legs_norm_max   | 3.2      |
+|    state_actor_m_legs_norm_mean  | 3.08     |
+|    state_actor_m_s_norm_max      | 3.71     |
+|    state_actor_m_s_norm_mean     | 2.68     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 294      |
+|    state_critic_M_norm_max       | 37.1     |
+|    state_critic_M_norm_mean      | 17.3     |
+|    state_critic_h_norm_max       | 19.7     |
+|    state_critic_h_norm_mean      | 19.1     |
+|    state_critic_m_f_norm_max     | 82.9     |
+|    state_critic_m_f_norm_mean    | 70.7     |
+|    state_critic_m_legs_norm_max  | 3.54     |
+|    state_critic_m_legs_norm_mean | 3.34     |
+|    state_critic_m_s_norm_max     | 4.43     |
+|    state_critic_m_s_norm_mean    | 3.01     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 294      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.501   |
+| time/                            |          |
+|    fps                           | 62       |
+|    iterations                    | 9        |
+|    time_elapsed                  | 1181     |
+|    total_timesteps               | 73728    |
+-----------------------------------------------
+Eval num_timesteps=81920, episode_reward=-0.48 +/- 0.04
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.483   |
+| grad/                  |          |
+|    actor_norm          | 0.641    |
+|    cell_actor_norm     | 0.381    |
+|    cell_critic_norm    | 0.0402   |
+|    critic_norm         | 0.0578   |
+|    encoder_actor_norm  | 0.138    |
+|    encoder_critic_norm | 0.0332   |
+| time/                  |          |
+|    total_timesteps     | 81920    |
+| train/                 |          |
+|    approx_kl           | 0.00268  |
+|    clip_fraction       | 0.0206   |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.685    |
+|    grad_norm           | 0.725    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 1152     |
+|    policy_loss         | -0.00283 |
+|    value_loss          | 0.000512 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.265    |
+|    action_frac_1                 | 0.279    |
+|    action_frac_2                 | 0.218    |
+|    action_frac_3                 | 0.238    |
+|    innovation_mag_max            | 0.443    |
+|    innovation_mag_mean           | 0.4      |
+|    innovation_mag_phase_0_count  | 4152     |
+|    innovation_mag_phase_0_mean   | 0.423    |
+|    innovation_mag_phase_1_count  | 4040     |
+|    innovation_mag_phase_1_mean   | 0.377    |
+|    state_actor_M_norm_max        | 30.5     |
+|    state_actor_M_norm_mean       | 16.1     |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.5     |
+|    state_actor_m_f_norm_max      | 101      |
+|    state_actor_m_f_norm_mean     | 84.5     |
+|    state_actor_m_legs_norm_max   | 3.19     |
+|    state_actor_m_legs_norm_mean  | 3.05     |
+|    state_actor_m_s_norm_max      | 3.68     |
+|    state_actor_m_s_norm_mean     | 2.66     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 294      |
+|    state_critic_M_norm_max       | 37.2     |
+|    state_critic_M_norm_mean      | 17.3     |
+|    state_critic_h_norm_max       | 19.7     |
+|    state_critic_h_norm_mean      | 19.2     |
+|    state_critic_m_f_norm_max     | 82.7     |
+|    state_critic_m_f_norm_mean    | 70.8     |
+|    state_critic_m_legs_norm_max  | 3.56     |
+|    state_critic_m_legs_norm_mean | 3.35     |
+|    state_critic_m_s_norm_max     | 4.43     |
+|    state_critic_m_s_norm_mean    | 3.03     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 294      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.501   |
+| time/                            |          |
+|    fps                           | 61       |
+|    iterations                    | 10       |
+|    time_elapsed                  | 1327     |
+|    total_timesteps               | 81920    |
+-----------------------------------------------
+Eval num_timesteps=90112, episode_reward=-0.49 +/- 0.01
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.488   |
+| grad/                  |          |
+|    actor_norm          | 0.644    |
+|    cell_actor_norm     | 0.693    |
+|    cell_critic_norm    | 0.0426   |
+|    critic_norm         | 0.0649   |
+|    encoder_actor_norm  | 0.218    |
+|    encoder_critic_norm | 0.0371   |
+| time/                  |          |
+|    total_timesteps     | 90112    |
+| train/                 |          |
+|    approx_kl           | 0.00264  |
+|    clip_fraction       | 0.0182   |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.712    |
+|    grad_norm           | 0.959    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 1280     |
+|    policy_loss         | -0.0029  |
+|    value_loss          | 0.000492 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.297    |
+|    action_frac_1                 | 0.265    |
+|    action_frac_2                 | 0.214    |
+|    action_frac_3                 | 0.225    |
+|    innovation_mag_max            | 0.456    |
+|    innovation_mag_mean           | 0.406    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.435    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.375    |
+|    state_actor_M_norm_max        | 30.5     |
+|    state_actor_M_norm_mean       | 16.1     |
+|    state_actor_h_norm_max        | 19.2     |
+|    state_actor_h_norm_mean       | 18.4     |
+|    state_actor_m_f_norm_max      | 97.7     |
+|    state_actor_m_f_norm_mean     | 81.7     |
+|    state_actor_m_legs_norm_max   | 3.11     |
+|    state_actor_m_legs_norm_mean  | 3.02     |
+|    state_actor_m_s_norm_max      | 3.66     |
+|    state_actor_m_s_norm_mean     | 2.64     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 295      |
+|    state_critic_M_norm_max       | 37.2     |
+|    state_critic_M_norm_mean      | 17.3     |
+|    state_critic_h_norm_max       | 19.7     |
+|    state_critic_h_norm_mean      | 19.2     |
+|    state_critic_m_f_norm_max     | 82.7     |
+|    state_critic_m_f_norm_mean    | 70.8     |
+|    state_critic_m_legs_norm_max  | 3.56     |
+|    state_critic_m_legs_norm_mean | 3.35     |
+|    state_critic_m_s_norm_max     | 4.43     |
+|    state_critic_m_s_norm_mean    | 3.04     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 295      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.492   |
+| time/                            |          |
+|    fps                           | 61       |
+|    iterations                    | 11       |
+|    time_elapsed                  | 1472     |
+|    total_timesteps               | 90112    |
+-----------------------------------------------
+Eval num_timesteps=98304, episode_reward=-0.50 +/- 0.01
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.5      |
+| grad/                  |           |
+|    actor_norm          | 0.638     |
+|    cell_actor_norm     | 1.6       |
+|    cell_critic_norm    | 0.0432    |
+|    critic_norm         | 0.0679    |
+|    encoder_actor_norm  | 0.545     |
+|    encoder_critic_norm | 0.0384    |
+| time/                  |           |
+|    total_timesteps     | 98304     |
+| train/                 |           |
+|    approx_kl           | 0.0016    |
+|    clip_fraction       | 0.0131    |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.37     |
+|    explained_variance  | 0.752     |
+|    grad_norm           | 1.84      |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 1408      |
+|    policy_loss         | -0.000735 |
+|    value_loss          | 0.000479  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.294    |
+|    action_frac_1                 | 0.281    |
+|    action_frac_2                 | 0.214    |
+|    action_frac_3                 | 0.212    |
+|    innovation_mag_max            | 0.449    |
+|    innovation_mag_mean           | 0.403    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.427    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.377    |
+|    state_actor_M_norm_max        | 30.7     |
+|    state_actor_M_norm_mean       | 16.3     |
+|    state_actor_h_norm_max        | 19.2     |
+|    state_actor_h_norm_mean       | 18.4     |
+|    state_actor_m_f_norm_max      | 96.3     |
+|    state_actor_m_f_norm_mean     | 81.6     |
+|    state_actor_m_legs_norm_max   | 3.2      |
+|    state_actor_m_legs_norm_mean  | 3.08     |
+|    state_actor_m_s_norm_max      | 3.71     |
+|    state_actor_m_s_norm_mean     | 2.67     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 295      |
+|    state_critic_M_norm_max       | 37.2     |
+|    state_critic_M_norm_mean      | 17.4     |
+|    state_critic_h_norm_max       | 19.8     |
+|    state_critic_h_norm_mean      | 19.2     |
+|    state_critic_m_f_norm_max     | 82.2     |
+|    state_critic_m_f_norm_mean    | 70.3     |
+|    state_critic_m_legs_norm_max  | 3.56     |
+|    state_critic_m_legs_norm_mean | 3.36     |
+|    state_critic_m_s_norm_max     | 4.42     |
+|    state_critic_m_s_norm_mean    | 3.02     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 295      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.499   |
+| time/                            |          |
+|    fps                           | 60       |
+|    iterations                    | 12       |
+|    time_elapsed                  | 1617     |
+|    total_timesteps               | 98304    |
+-----------------------------------------------
+Eval num_timesteps=106496, episode_reward=-0.50 +/- 0.04
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.504    |
+| grad/                  |           |
+|    actor_norm          | 0.629     |
+|    cell_actor_norm     | 1.13      |
+|    cell_critic_norm    | 0.0439    |
+|    critic_norm         | 0.072     |
+|    encoder_actor_norm  | 0.42      |
+|    encoder_critic_norm | 0.0404    |
+| time/                  |           |
+|    total_timesteps     | 106496    |
+| train/                 |           |
+|    approx_kl           | 0.00124   |
+|    clip_fraction       | 0.0103    |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.37     |
+|    explained_variance  | 0.773     |
+|    grad_norm           | 1.41      |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 1536      |
+|    policy_loss         | -0.000965 |
+|    value_loss          | 0.000499  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.284    |
+|    action_frac_1                 | 0.279    |
+|    action_frac_2                 | 0.223    |
+|    action_frac_3                 | 0.214    |
+|    innovation_mag_max            | 0.448    |
+|    innovation_mag_mean           | 0.398    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.418    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.377    |
+|    state_actor_M_norm_max        | 31.1     |
+|    state_actor_M_norm_mean       | 16.5     |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.5     |
+|    state_actor_m_f_norm_max      | 97.1     |
+|    state_actor_m_f_norm_mean     | 82.5     |
+|    state_actor_m_legs_norm_max   | 3.25     |
+|    state_actor_m_legs_norm_mean  | 3.11     |
+|    state_actor_m_s_norm_max      | 3.72     |
+|    state_actor_m_s_norm_mean     | 2.69     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 295      |
+|    state_critic_M_norm_max       | 37.3     |
+|    state_critic_M_norm_mean      | 17.4     |
+|    state_critic_h_norm_max       | 19.7     |
+|    state_critic_h_norm_mean      | 19.3     |
+|    state_critic_m_f_norm_max     | 82.6     |
+|    state_critic_m_f_norm_mean    | 70.4     |
+|    state_critic_m_legs_norm_max  | 3.56     |
+|    state_critic_m_legs_norm_mean | 3.36     |
+|    state_critic_m_s_norm_max     | 4.43     |
+|    state_critic_m_s_norm_mean    | 3.03     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 295      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.491   |
+| time/                            |          |
+|    fps                           | 60       |
+|    iterations                    | 13       |
+|    time_elapsed                  | 1763     |
+|    total_timesteps               | 106496   |
+-----------------------------------------------
+Eval num_timesteps=114688, episode_reward=-0.47 +/- 0.05
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.467    |
+| grad/                  |           |
+|    actor_norm          | 0.608     |
+|    cell_actor_norm     | 1.05      |
+|    cell_critic_norm    | 0.0427    |
+|    critic_norm         | 0.0704    |
+|    encoder_actor_norm  | 0.328     |
+|    encoder_critic_norm | 0.0387    |
+| time/                  |           |
+|    total_timesteps     | 114688    |
+| train/                 |           |
+|    approx_kl           | 0.00185   |
+|    clip_fraction       | 0.0184    |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.37     |
+|    explained_variance  | 0.775     |
+|    grad_norm           | 1.2       |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 1664      |
+|    policy_loss         | -0.000348 |
+|    value_loss          | 0.000462  |
+--------------------------------------
+New best mean reward!
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.268    |
+|    action_frac_1                 | 0.279    |
+|    action_frac_2                 | 0.244    |
+|    action_frac_3                 | 0.209    |
+|    innovation_mag_max            | 0.418    |
+|    innovation_mag_mean           | 0.384    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.391    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.377    |
+|    state_actor_M_norm_max        | 31.1     |
+|    state_actor_M_norm_mean       | 16.6     |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.4     |
+|    state_actor_m_f_norm_max      | 88.3     |
+|    state_actor_m_f_norm_mean     | 73.7     |
+|    state_actor_m_legs_norm_max   | 3.24     |
+|    state_actor_m_legs_norm_mean  | 3.13     |
+|    state_actor_m_s_norm_max      | 3.74     |
+|    state_actor_m_s_norm_mean     | 2.71     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 296      |
+|    state_critic_M_norm_max       | 37.3     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 19.8     |
+|    state_critic_h_norm_mean      | 19.3     |
+|    state_critic_m_f_norm_max     | 82.9     |
+|    state_critic_m_f_norm_mean    | 70.7     |
+|    state_critic_m_legs_norm_max  | 3.58     |
+|    state_critic_m_legs_norm_mean | 3.38     |
+|    state_critic_m_s_norm_max     | 4.46     |
+|    state_critic_m_s_norm_mean    | 3.05     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 296      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.495   |
+| time/                            |          |
+|    fps                           | 60       |
+|    iterations                    | 14       |
+|    time_elapsed                  | 1909     |
+|    total_timesteps               | 114688   |
+-----------------------------------------------
+Eval num_timesteps=122880, episode_reward=-0.50 +/- 0.04
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.496   |
+| grad/                  |          |
+|    actor_norm          | 0.659    |
+|    cell_actor_norm     | 1.2      |
+|    cell_critic_norm    | 0.0389   |
+|    critic_norm         | 0.0679   |
+|    encoder_actor_norm  | 0.432    |
+|    encoder_critic_norm | 0.0369   |
+| time/                  |          |
+|    total_timesteps     | 122880   |
+| train/                 |          |
+|    approx_kl           | 0.00225  |
+|    clip_fraction       | 0.0169   |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.752    |
+|    grad_norm           | 1.4      |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 1792     |
+|    policy_loss         | -0.00127 |
+|    value_loss          | 0.000455 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.27     |
+|    action_frac_1                 | 0.295    |
+|    action_frac_2                 | 0.233    |
+|    action_frac_3                 | 0.202    |
+|    innovation_mag_max            | 0.424    |
+|    innovation_mag_mean           | 0.391    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.403    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.379    |
+|    state_actor_M_norm_max        | 32.4     |
+|    state_actor_M_norm_mean       | 17       |
+|    state_actor_h_norm_max        | 19.1     |
+|    state_actor_h_norm_mean       | 18.5     |
+|    state_actor_m_f_norm_max      | 91.5     |
+|    state_actor_m_f_norm_mean     | 77.6     |
+|    state_actor_m_legs_norm_max   | 3.25     |
+|    state_actor_m_legs_norm_mean  | 3.17     |
+|    state_actor_m_s_norm_max      | 3.8      |
+|    state_actor_m_s_norm_mean     | 2.75     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 296      |
+|    state_critic_M_norm_max       | 37.4     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 19.8     |
+|    state_critic_h_norm_mean      | 19.4     |
+|    state_critic_m_f_norm_max     | 82.5     |
+|    state_critic_m_f_norm_mean    | 70.2     |
+|    state_critic_m_legs_norm_max  | 3.58     |
+|    state_critic_m_legs_norm_mean | 3.38     |
+|    state_critic_m_s_norm_max     | 4.45     |
+|    state_critic_m_s_norm_mean    | 3.06     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 296      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.502   |
+| time/                            |          |
+|    fps                           | 59       |
+|    iterations                    | 15       |
+|    time_elapsed                  | 2055     |
+|    total_timesteps               | 122880   |
+-----------------------------------------------
+Eval num_timesteps=131072, episode_reward=-0.49 +/- 0.01
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.494   |
+| grad/                  |          |
+|    actor_norm          | 0.645    |
+|    cell_actor_norm     | 0.493    |
+|    cell_critic_norm    | 0.0368   |
+|    critic_norm         | 0.0617   |
+|    encoder_actor_norm  | 0.17     |
+|    encoder_critic_norm | 0.0336   |
+| time/                  |          |
+|    total_timesteps     | 131072   |
+| train/                 |          |
+|    approx_kl           | 0.00155  |
+|    clip_fraction       | 0.00864  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.769    |
+|    grad_norm           | 0.782    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 1920     |
+|    policy_loss         | -0.00149 |
+|    value_loss          | 0.00045  |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.283    |
+|    action_frac_1                 | 0.27     |
+|    action_frac_2                 | 0.236    |
+|    action_frac_3                 | 0.212    |
+|    innovation_mag_max            | 0.419    |
+|    innovation_mag_mean           | 0.389    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.4      |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.378    |
+|    state_actor_M_norm_max        | 32.6     |
+|    state_actor_M_norm_mean       | 17.1     |
+|    state_actor_h_norm_max        | 19.2     |
+|    state_actor_h_norm_mean       | 18.6     |
+|    state_actor_m_f_norm_max      | 86       |
+|    state_actor_m_f_norm_mean     | 74.5     |
+|    state_actor_m_legs_norm_max   | 3.25     |
+|    state_actor_m_legs_norm_mean  | 3.17     |
+|    state_actor_m_s_norm_max      | 3.8      |
+|    state_actor_m_s_norm_mean     | 2.74     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 296      |
+|    state_critic_M_norm_max       | 37.5     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 19.9     |
+|    state_critic_h_norm_mean      | 19.4     |
+|    state_critic_m_f_norm_max     | 83       |
+|    state_critic_m_f_norm_mean    | 70.9     |
+|    state_critic_m_legs_norm_max  | 3.58     |
+|    state_critic_m_legs_norm_mean | 3.38     |
+|    state_critic_m_s_norm_max     | 4.47     |
+|    state_critic_m_s_norm_mean    | 3.05     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 296      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.504   |
+| time/                            |          |
+|    fps                           | 59       |
+|    iterations                    | 16       |
+|    time_elapsed                  | 2202     |
+|    total_timesteps               | 131072   |
+-----------------------------------------------
+Eval num_timesteps=139264, episode_reward=-0.49 +/- 0.01
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.49    |
+| grad/                  |          |
+|    actor_norm          | 0.657    |
+|    cell_actor_norm     | 0.88     |
+|    cell_critic_norm    | 0.0405   |
+|    critic_norm         | 0.0718   |
+|    encoder_actor_norm  | 0.302    |
+|    encoder_critic_norm | 0.0387   |
+| time/                  |          |
+|    total_timesteps     | 139264   |
+| train/                 |          |
+|    approx_kl           | 0.00202  |
+|    clip_fraction       | 0.00626  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.778    |
+|    grad_norm           | 1.23     |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 2048     |
+|    policy_loss         | -0.00143 |
+|    value_loss          | 0.000485 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.272    |
+|    action_frac_1                 | 0.25     |
+|    action_frac_2                 | 0.241    |
+|    action_frac_3                 | 0.238    |
+|    innovation_mag_max            | 0.411    |
+|    innovation_mag_mean           | 0.385    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.392    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.378    |
+|    state_actor_M_norm_max        | 32.7     |
+|    state_actor_M_norm_mean       | 17.1     |
+|    state_actor_h_norm_max        | 19.2     |
+|    state_actor_h_norm_mean       | 18.7     |
+|    state_actor_m_f_norm_max      | 83.1     |
+|    state_actor_m_f_norm_mean     | 73.1     |
+|    state_actor_m_legs_norm_max   | 3.31     |
+|    state_actor_m_legs_norm_mean  | 3.2      |
+|    state_actor_m_s_norm_max      | 3.84     |
+|    state_actor_m_s_norm_mean     | 2.78     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 297      |
+|    state_critic_M_norm_max       | 37.6     |
+|    state_critic_M_norm_mean      | 17.6     |
+|    state_critic_h_norm_max       | 19.9     |
+|    state_critic_h_norm_mean      | 19.4     |
+|    state_critic_m_f_norm_max     | 82.8     |
+|    state_critic_m_f_norm_mean    | 71.1     |
+|    state_critic_m_legs_norm_max  | 3.59     |
+|    state_critic_m_legs_norm_mean | 3.38     |
+|    state_critic_m_s_norm_max     | 4.49     |
+|    state_critic_m_s_norm_mean    | 3.08     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 297      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.496   |
+| time/                            |          |
+|    fps                           | 59       |
+|    iterations                    | 17       |
+|    time_elapsed                  | 2348     |
+|    total_timesteps               | 139264   |
+-----------------------------------------------
+Eval num_timesteps=147456, episode_reward=-0.50 +/- 0.02
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.496   |
+| grad/                  |          |
+|    actor_norm          | 0.653    |
+|    cell_actor_norm     | 0.39     |
+|    cell_critic_norm    | 0.0424   |
+|    critic_norm         | 0.0807   |
+|    encoder_actor_norm  | 0.143    |
+|    encoder_critic_norm | 0.0429   |
+| time/                  |          |
+|    total_timesteps     | 147456   |
+| train/                 |          |
+|    approx_kl           | 0.000896 |
+|    clip_fraction       | 0.00327  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.763    |
+|    grad_norm           | 0.794    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 2176     |
+|    policy_loss         | -0.00124 |
+|    value_loss          | 0.000574 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.288    |
+|    action_frac_1                 | 0.243    |
+|    action_frac_2                 | 0.223    |
+|    action_frac_3                 | 0.246    |
+|    innovation_mag_max            | 0.417    |
+|    innovation_mag_mean           | 0.385    |
+|    innovation_mag_phase_0_count  | 4200     |
+|    innovation_mag_phase_0_mean   | 0.391    |
+|    innovation_mag_phase_1_count  | 3992     |
+|    innovation_mag_phase_1_mean   | 0.378    |
+|    state_actor_M_norm_max        | 32.7     |
+|    state_actor_M_norm_mean       | 17.1     |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.7     |
+|    state_actor_m_f_norm_max      | 86.3     |
+|    state_actor_m_f_norm_mean     | 74.2     |
+|    state_actor_m_legs_norm_max   | 3.29     |
+|    state_actor_m_legs_norm_mean  | 3.2      |
+|    state_actor_m_s_norm_max      | 3.83     |
+|    state_actor_m_s_norm_mean     | 2.78     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 297      |
+|    state_critic_M_norm_max       | 37.6     |
+|    state_critic_M_norm_mean      | 17.6     |
+|    state_critic_h_norm_max       | 19.9     |
+|    state_critic_h_norm_mean      | 19.5     |
+|    state_critic_m_f_norm_max     | 83.4     |
+|    state_critic_m_f_norm_mean    | 70.8     |
+|    state_critic_m_legs_norm_max  | 3.59     |
+|    state_critic_m_legs_norm_mean | 3.38     |
+|    state_critic_m_s_norm_max     | 4.5      |
+|    state_critic_m_s_norm_mean    | 3.07     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 297      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.493   |
+| time/                            |          |
+|    fps                           | 59       |
+|    iterations                    | 18       |
+|    time_elapsed                  | 2495     |
+|    total_timesteps               | 147456   |
+-----------------------------------------------
+Eval num_timesteps=155648, episode_reward=-0.50 +/- 0.02
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.496   |
+| grad/                  |          |
+|    actor_norm          | 0.65     |
+|    cell_actor_norm     | 0.486    |
+|    cell_critic_norm    | 0.0315   |
+|    critic_norm         | 0.0606   |
+|    encoder_actor_norm  | 0.184    |
+|    encoder_critic_norm | 0.0319   |
+| time/                  |          |
+|    total_timesteps     | 155648   |
+| train/                 |          |
+|    approx_kl           | 0.00144  |
+|    clip_fraction       | 0.00797  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.756    |
+|    grad_norm           | 0.816    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 2304     |
+|    policy_loss         | -0.00123 |
+|    value_loss          | 0.000458 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.292    |
+|    action_frac_1                 | 0.258    |
+|    action_frac_2                 | 0.227    |
+|    action_frac_3                 | 0.223    |
+|    innovation_mag_max            | 0.426    |
+|    innovation_mag_mean           | 0.387    |
+|    innovation_mag_phase_0_count  | 4184     |
+|    innovation_mag_phase_0_mean   | 0.392    |
+|    innovation_mag_phase_1_count  | 4008     |
+|    innovation_mag_phase_1_mean   | 0.382    |
+|    state_actor_M_norm_max        | 32.2     |
+|    state_actor_M_norm_mean       | 17       |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.7     |
+|    state_actor_m_f_norm_max      | 87.6     |
+|    state_actor_m_f_norm_mean     | 75.2     |
+|    state_actor_m_legs_norm_max   | 3.3      |
+|    state_actor_m_legs_norm_mean  | 3.2      |
+|    state_actor_m_s_norm_max      | 3.8      |
+|    state_actor_m_s_norm_mean     | 2.77     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 296      |
+|    state_critic_M_norm_max       | 37.6     |
+|    state_critic_M_norm_mean      | 17.6     |
+|    state_critic_h_norm_max       | 19.9     |
+|    state_critic_h_norm_mean      | 19.5     |
+|    state_critic_m_f_norm_max     | 83.8     |
+|    state_critic_m_f_norm_mean    | 71.3     |
+|    state_critic_m_legs_norm_max  | 3.6      |
+|    state_critic_m_legs_norm_mean | 3.4      |
+|    state_critic_m_s_norm_max     | 4.47     |
+|    state_critic_m_s_norm_mean    | 3.08     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 296      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.499   |
+| time/                            |          |
+|    fps                           | 58       |
+|    iterations                    | 19       |
+|    time_elapsed                  | 2642     |
+|    total_timesteps               | 155648   |
+-----------------------------------------------
+Eval num_timesteps=163840, episode_reward=-0.49 +/- 0.01
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.494    |
+| grad/                  |           |
+|    actor_norm          | 0.649     |
+|    cell_actor_norm     | 0.935     |
+|    cell_critic_norm    | 0.03      |
+|    critic_norm         | 0.0612    |
+|    encoder_actor_norm  | 0.29      |
+|    encoder_critic_norm | 0.0316    |
+| time/                  |           |
+|    total_timesteps     | 163840    |
+| train/                 |           |
+|    approx_kl           | 0.00123   |
+|    clip_fraction       | 0.00653   |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.38     |
+|    explained_variance  | 0.764     |
+|    grad_norm           | 1.23      |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 2432      |
+|    policy_loss         | -0.000655 |
+|    value_loss          | 0.000423  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.289    |
+|    action_frac_1                 | 0.27     |
+|    action_frac_2                 | 0.226    |
+|    action_frac_3                 | 0.215    |
+|    innovation_mag_max            | 0.425    |
+|    innovation_mag_mean           | 0.386    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.392    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.38     |
+|    state_actor_M_norm_max        | 32.4     |
+|    state_actor_M_norm_mean       | 16.8     |
+|    state_actor_h_norm_max        | 19.2     |
+|    state_actor_h_norm_mean       | 18.7     |
+|    state_actor_m_f_norm_max      | 86.9     |
+|    state_actor_m_f_norm_mean     | 75.8     |
+|    state_actor_m_legs_norm_max   | 3.3      |
+|    state_actor_m_legs_norm_mean  | 3.19     |
+|    state_actor_m_s_norm_max      | 3.81     |
+|    state_actor_m_s_norm_mean     | 2.75     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 291      |
+|    state_critic_M_norm_max       | 37.6     |
+|    state_critic_M_norm_mean      | 17.3     |
+|    state_critic_h_norm_max       | 19.9     |
+|    state_critic_h_norm_mean      | 19.5     |
+|    state_critic_m_f_norm_max     | 83.1     |
+|    state_critic_m_f_norm_mean    | 70.4     |
+|    state_critic_m_legs_norm_max  | 3.59     |
+|    state_critic_m_legs_norm_mean | 3.39     |
+|    state_critic_m_s_norm_max     | 4.47     |
+|    state_critic_m_s_norm_mean    | 3.04     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 291      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.5     |
+| time/                            |          |
+|    fps                           | 58       |
+|    iterations                    | 20       |
+|    time_elapsed                  | 2789     |
+|    total_timesteps               | 163840   |
+-----------------------------------------------
+Eval num_timesteps=172032, episode_reward=-0.52 +/- 0.06
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.515   |
+| grad/                  |          |
+|    actor_norm          | 0.626    |
+|    cell_actor_norm     | 0.693    |
+|    cell_critic_norm    | 0.0355   |
+|    critic_norm         | 0.0739   |
+|    encoder_actor_norm  | 0.236    |
+|    encoder_critic_norm | 0.0378   |
+| time/                  |          |
+|    total_timesteps     | 172032   |
+| train/                 |          |
+|    approx_kl           | 0.00161  |
+|    clip_fraction       | 0.00818  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.757    |
+|    grad_norm           | 0.991    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 2560     |
+|    policy_loss         | -0.00083 |
+|    value_loss          | 0.000492 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.279    |
+|    action_frac_1                 | 0.264    |
+|    action_frac_2                 | 0.226    |
+|    action_frac_3                 | 0.232    |
+|    innovation_mag_max            | 0.42     |
+|    innovation_mag_mean           | 0.387    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.393    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.38     |
+|    state_actor_M_norm_max        | 32.4     |
+|    state_actor_M_norm_mean       | 17       |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.6     |
+|    state_actor_m_f_norm_max      | 85.9     |
+|    state_actor_m_f_norm_mean     | 73.9     |
+|    state_actor_m_legs_norm_max   | 3.29     |
+|    state_actor_m_legs_norm_mean  | 3.2      |
+|    state_actor_m_s_norm_max      | 3.79     |
+|    state_actor_m_s_norm_mean     | 2.75     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 292      |
+|    state_critic_M_norm_max       | 37.7     |
+|    state_critic_M_norm_mean      | 17.4     |
+|    state_critic_h_norm_max       | 19.9     |
+|    state_critic_h_norm_mean      | 19.5     |
+|    state_critic_m_f_norm_max     | 82.7     |
+|    state_critic_m_f_norm_mean    | 70.7     |
+|    state_critic_m_legs_norm_max  | 3.6      |
+|    state_critic_m_legs_norm_mean | 3.41     |
+|    state_critic_m_s_norm_max     | 4.48     |
+|    state_critic_m_s_norm_mean    | 3.07     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 292      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.511   |
+| time/                            |          |
+|    fps                           | 58       |
+|    iterations                    | 21       |
+|    time_elapsed                  | 2935     |
+|    total_timesteps               | 172032   |
+-----------------------------------------------
+Eval num_timesteps=180224, episode_reward=-0.50 +/- 0.03
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.504   |
+| grad/                  |          |
+|    actor_norm          | 0.647    |
+|    cell_actor_norm     | 0.875    |
+|    cell_critic_norm    | 0.0313   |
+|    critic_norm         | 0.0711   |
+|    encoder_actor_norm  | 0.274    |
+|    encoder_critic_norm | 0.0362   |
+| time/                  |          |
+|    total_timesteps     | 180224   |
+| train/                 |          |
+|    approx_kl           | 0.00158  |
+|    clip_fraction       | 0.00961  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.38    |
+|    explained_variance  | 0.787    |
+|    grad_norm           | 1.1      |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 2688     |
+|    policy_loss         | -0.00101 |
+|    value_loss          | 0.000438 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.286    |
+|    action_frac_1                 | 0.241    |
+|    action_frac_2                 | 0.239    |
+|    action_frac_3                 | 0.234    |
+|    innovation_mag_max            | 0.421    |
+|    innovation_mag_mean           | 0.388    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.395    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.381    |
+|    state_actor_M_norm_max        | 32.2     |
+|    state_actor_M_norm_mean       | 17       |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.6     |
+|    state_actor_m_f_norm_max      | 86.9     |
+|    state_actor_m_f_norm_mean     | 74.6     |
+|    state_actor_m_legs_norm_max   | 3.31     |
+|    state_actor_m_legs_norm_mean  | 3.19     |
+|    state_actor_m_s_norm_max      | 3.8      |
+|    state_actor_m_s_norm_mean     | 2.76     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 292      |
+|    state_critic_M_norm_max       | 37.7     |
+|    state_critic_M_norm_mean      | 17.4     |
+|    state_critic_h_norm_max       | 20       |
+|    state_critic_h_norm_mean      | 19.6     |
+|    state_critic_m_f_norm_max     | 83.3     |
+|    state_critic_m_f_norm_mean    | 70.5     |
+|    state_critic_m_legs_norm_max  | 3.62     |
+|    state_critic_m_legs_norm_mean | 3.42     |
+|    state_critic_m_s_norm_max     | 4.51     |
+|    state_critic_m_s_norm_mean    | 3.07     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 292      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.5     |
+| time/                            |          |
+|    fps                           | 58       |
+|    iterations                    | 22       |
+|    time_elapsed                  | 3082     |
+|    total_timesteps               | 180224   |
+-----------------------------------------------
+Eval num_timesteps=188416, episode_reward=-0.49 +/- 0.05
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.492    |
+| grad/                  |           |
+|    actor_norm          | 0.607     |
+|    cell_actor_norm     | 1.95      |
+|    cell_critic_norm    | 0.0246    |
+|    critic_norm         | 0.0521    |
+|    encoder_actor_norm  | 0.608     |
+|    encoder_critic_norm | 0.0261    |
+| time/                  |           |
+|    total_timesteps     | 188416    |
+| train/                 |           |
+|    approx_kl           | 0.00184   |
+|    clip_fraction       | 0.0109    |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.38     |
+|    explained_variance  | 0.783     |
+|    grad_norm           | 2.08      |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 2816      |
+|    policy_loss         | -0.000993 |
+|    value_loss          | 0.000388  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.274    |
+|    action_frac_1                 | 0.241    |
+|    action_frac_2                 | 0.243    |
+|    action_frac_3                 | 0.242    |
+|    innovation_mag_max            | 0.412    |
+|    innovation_mag_mean           | 0.385    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.39     |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.38     |
+|    state_actor_M_norm_max        | 31.8     |
+|    state_actor_M_norm_mean       | 16.8     |
+|    state_actor_h_norm_max        | 19.2     |
+|    state_actor_h_norm_mean       | 18.5     |
+|    state_actor_m_f_norm_max      | 86.9     |
+|    state_actor_m_f_norm_mean     | 73.5     |
+|    state_actor_m_legs_norm_max   | 3.27     |
+|    state_actor_m_legs_norm_mean  | 3.15     |
+|    state_actor_m_s_norm_max      | 3.78     |
+|    state_actor_m_s_norm_mean     | 2.71     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 292      |
+|    state_critic_M_norm_max       | 37.8     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 20       |
+|    state_critic_h_norm_mean      | 19.6     |
+|    state_critic_m_f_norm_max     | 82.7     |
+|    state_critic_m_f_norm_mean    | 70.1     |
+|    state_critic_m_legs_norm_max  | 3.61     |
+|    state_critic_m_legs_norm_mean | 3.4      |
+|    state_critic_m_s_norm_max     | 4.48     |
+|    state_critic_m_s_norm_mean    | 3.06     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 292      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.493   |
+| time/                            |          |
+|    fps                           | 58       |
+|    iterations                    | 23       |
+|    time_elapsed                  | 3227     |
+|    total_timesteps               | 188416   |
+-----------------------------------------------
+Eval num_timesteps=196608, episode_reward=-0.49 +/- 0.01
+Episode length: 207.00 +/- 0.00
+--------------------------------------
+| eval/                  |           |
+|    mean_ep_length      | 207       |
+|    mean_reward         | -0.488    |
+| grad/                  |           |
+|    actor_norm          | 0.612     |
+|    cell_actor_norm     | 0.409     |
+|    cell_critic_norm    | 0.0263    |
+|    critic_norm         | 0.0575    |
+|    encoder_actor_norm  | 0.126     |
+|    encoder_critic_norm | 0.0285    |
+| time/                  |           |
+|    total_timesteps     | 196608    |
+| train/                 |           |
+|    approx_kl           | 0.00165   |
+|    clip_fraction       | 0.00363   |
+|    clip_range          | 0.2       |
+|    entropy_loss        | -1.38     |
+|    explained_variance  | 0.805     |
+|    grad_norm           | 0.67      |
+|    learning_rate       | 5e-05     |
+|    n_updates           | 2944      |
+|    policy_loss         | -0.000905 |
+|    value_loss          | 0.000403  |
+--------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.293    |
+|    action_frac_1                 | 0.245    |
+|    action_frac_2                 | 0.244    |
+|    action_frac_3                 | 0.218    |
+|    innovation_mag_max            | 0.423    |
+|    innovation_mag_mean           | 0.385    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.389    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.381    |
+|    state_actor_M_norm_max        | 31.6     |
+|    state_actor_M_norm_mean       | 16.9     |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.6     |
+|    state_actor_m_f_norm_max      | 86       |
+|    state_actor_m_f_norm_mean     | 73.6     |
+|    state_actor_m_legs_norm_max   | 3.32     |
+|    state_actor_m_legs_norm_mean  | 3.18     |
+|    state_actor_m_s_norm_max      | 3.75     |
+|    state_actor_m_s_norm_mean     | 2.73     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 293      |
+|    state_critic_M_norm_max       | 37.7     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 20       |
+|    state_critic_h_norm_mean      | 19.6     |
+|    state_critic_m_f_norm_max     | 82.2     |
+|    state_critic_m_f_norm_mean    | 70.1     |
+|    state_critic_m_legs_norm_max  | 3.61     |
+|    state_critic_m_legs_norm_mean | 3.4      |
+|    state_critic_m_s_norm_max     | 4.52     |
+|    state_critic_m_s_norm_mean    | 3.06     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 293      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.493   |
+| time/                            |          |
+|    fps                           | 58       |
+|    iterations                    | 24       |
+|    time_elapsed                  | 3376     |
+|    total_timesteps               | 196608   |
+-----------------------------------------------
+Eval num_timesteps=204800, episode_reward=-0.49 +/- 0.01
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.488   |
+| grad/                  |          |
+|    actor_norm          | 0.626    |
+|    cell_actor_norm     | 0.375    |
+|    cell_critic_norm    | 0.0222   |
+|    critic_norm         | 0.0503   |
+|    encoder_actor_norm  | 0.118    |
+|    encoder_critic_norm | 0.0248   |
+| time/                  |          |
+|    total_timesteps     | 204800   |
+| train/                 |          |
+|    approx_kl           | 0.00168  |
+|    clip_fraction       | 0.000977 |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.75     |
+|    grad_norm           | 0.656    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 3072     |
+|    policy_loss         | 0.0001   |
+|    value_loss          | 0.000373 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.281    |
+|    action_frac_1                 | 0.256    |
+|    action_frac_2                 | 0.245    |
+|    action_frac_3                 | 0.218    |
+|    innovation_mag_max            | 0.409    |
+|    innovation_mag_mean           | 0.385    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.391    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.38     |
+|    state_actor_M_norm_max        | 31.8     |
+|    state_actor_M_norm_mean       | 17       |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.6     |
+|    state_actor_m_f_norm_max      | 85.3     |
+|    state_actor_m_f_norm_mean     | 72       |
+|    state_actor_m_legs_norm_max   | 3.4      |
+|    state_actor_m_legs_norm_mean  | 3.2      |
+|    state_actor_m_s_norm_max      | 3.73     |
+|    state_actor_m_s_norm_mean     | 2.75     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 293      |
+|    state_critic_M_norm_max       | 37.7     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 20       |
+|    state_critic_h_norm_mean      | 19.6     |
+|    state_critic_m_f_norm_max     | 82.2     |
+|    state_critic_m_f_norm_mean    | 69.8     |
+|    state_critic_m_legs_norm_max  | 3.61     |
+|    state_critic_m_legs_norm_mean | 3.41     |
+|    state_critic_m_s_norm_max     | 4.51     |
+|    state_critic_m_s_norm_mean    | 3.06     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 293      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.508   |
+| time/                            |          |
+|    fps                           | 57       |
+|    iterations                    | 25       |
+|    time_elapsed                  | 3543     |
+|    total_timesteps               | 204800   |
+-----------------------------------------------
+Eval num_timesteps=212992, episode_reward=-0.49 +/- 0.07
+Episode length: 207.00 +/- 0.00
+-------------------------------------
+| eval/                  |          |
+|    mean_ep_length      | 207      |
+|    mean_reward         | -0.487   |
+| grad/                  |          |
+|    actor_norm          | 0.614    |
+|    cell_actor_norm     | 0.352    |
+|    cell_critic_norm    | 0.0212   |
+|    critic_norm         | 0.049    |
+|    encoder_actor_norm  | 0.12     |
+|    encoder_critic_norm | 0.0241   |
+| time/                  |          |
+|    total_timesteps     | 212992   |
+| train/                 |          |
+|    approx_kl           | 0.00209  |
+|    clip_fraction       | 0.00537  |
+|    clip_range          | 0.2      |
+|    entropy_loss        | -1.37    |
+|    explained_variance  | 0.833    |
+|    grad_norm           | 0.693    |
+|    learning_rate       | 5e-05    |
+|    n_updates           | 3200     |
+|    policy_loss         | -0.00222 |
+|    value_loss          | 0.000351 |
+-------------------------------------
+-----------------------------------------------
+| debug/                           |          |
+|    action_frac_0                 | 0.278    |
+|    action_frac_1                 | 0.267    |
+|    action_frac_2                 | 0.248    |
+|    action_frac_3                 | 0.207    |
+|    innovation_mag_max            | 0.409    |
+|    innovation_mag_mean           | 0.383    |
+|    innovation_mag_phase_0_count  | 4112     |
+|    innovation_mag_phase_0_mean   | 0.387    |
+|    innovation_mag_phase_1_count  | 4080     |
+|    innovation_mag_phase_1_mean   | 0.379    |
+|    state_actor_M_norm_max        | 31.5     |
+|    state_actor_M_norm_mean       | 17       |
+|    state_actor_h_norm_max        | 19.3     |
+|    state_actor_h_norm_mean       | 18.6     |
+|    state_actor_m_f_norm_max      | 87.2     |
+|    state_actor_m_f_norm_mean     | 72.9     |
+|    state_actor_m_legs_norm_max   | 3.33     |
+|    state_actor_m_legs_norm_mean  | 3.2      |
+|    state_actor_m_s_norm_max      | 3.71     |
+|    state_actor_m_s_norm_mean     | 2.75     |
+|    state_actor_t_norm_max        | 585      |
+|    state_actor_t_norm_mean       | 293      |
+|    state_critic_M_norm_max       | 37.8     |
+|    state_critic_M_norm_mean      | 17.5     |
+|    state_critic_h_norm_max       | 20.1     |
+|    state_critic_h_norm_mean      | 19.6     |
+|    state_critic_m_f_norm_max     | 82.1     |
+|    state_critic_m_f_norm_mean    | 70.1     |
+|    state_critic_m_legs_norm_max  | 3.61     |
+|    state_critic_m_legs_norm_mean | 3.41     |
+|    state_critic_m_s_norm_max     | 4.49     |
+|    state_critic_m_s_norm_mean    | 3.06     |
+|    state_critic_t_norm_max       | 585      |
+|    state_critic_t_norm_mean      | 293      |
+| rollout/                         |          |
+|    ep_len_mean                   | 207      |
+|    ep_rew_mean                   | -0.503   |
+| time/                            |          |
+|    fps                           | 57       |
+|    iterations                    | 26       |
+|    time_elapsed                  | 3736     |
+|    total_timesteps               | 212992   |
+-----------------------------------------------

@@ -4,12 +4,33 @@ Usage:
     python train.py --config benchmarks/phase_a/popgym_repeat_previous_easy.yaml
     python train.py --config <path> --seed 1 --total-timesteps 500_000
 
+    # Resume a run that was paused (Ctrl+C or STOP file dropped):
+    python train.py --config <path> --resume-from runs/.../seed_0_20260523_180000
+
 Each run writes to `runs/<benchmark>/<cell>/seed_<n>_<timestamp>/`:
     - config.yaml      — exact config used
     - git_hash.txt     — commit hash at run start
     - env.txt          — pip freeze output
     - tensorboard/     — TB logs (loss, grad norms, state norms, innovation)
-    - final_model.zip  — SB3 checkpoint at run end
+    - latest.pt        — resumable checkpoint (policy + optimizer + cell state
+                         + RNG + step counter). Rewritten every
+                         --save-freq-steps; also on SIGINT or STOP file.
+    - DONE             — marker file written when training completes normally.
+    - final_model.zip  — SB3 checkpoint at run end.
+
+Pause & resume:
+    - Ctrl+C once → callback saves latest.pt, exits cleanly with code 0.
+      Second Ctrl+C force-quits.
+    - `touch <run_dir>/STOP`  (or whatever --stop-file you pass) → same effect.
+    - To continue, run the same command with --resume-from <run_dir>.
+      The ablation runner does this discovery automatically.
+
+Perf knobs (set via env var so they apply to subprocesses too):
+    MEMRL_TF32=0              disable TF32 matmul (3070 Ti is Ampere → default on)
+    MEMRL_CUDNN_BENCHMARK=0   disable cudnn algorithm autotuning
+    MEMRL_TORCH_THREADS=N     cap intra-op CPU threads (default 4; runner sets
+                              max(1, 16 // parallel) so concurrent workers don't
+                              oversubscribe the i9-11900K)
 
 YAML schema:
     env_name:          string — gym env id, e.g. "popgym-RepeatPreviousEasy-v0"
@@ -46,8 +67,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import CallbackList, EvalCallback
 
 from memrl.cell import (
     DTHLMU,
@@ -67,6 +89,13 @@ from memrl.cell import (
 )
 from memrl.envs import make_vec_env
 from memrl.ppo import MemPPO
+from memrl.utils import (
+    ResumableCheckpointCallback,
+    apply_perf_defaults,
+    load_checkpoint,
+    maybe_compile_policy,
+    resolve_device,
+)
 
 
 # Cell registry — keep in sync with `memrl.cell.__init__.__all__`.
@@ -129,8 +158,24 @@ def make_cell_factory(cell_name: str, cell_kwargs: dict[str, Any], hidden_size: 
     return factory
 
 
-def make_run_dir(config_path: str, cfg: dict, runs_dir: str) -> Path:
-    """Create runs/<benchmark>/<cell>/seed_<n>_<timestamp>/ and snapshot config."""
+def make_run_dir(
+    config_path: str,
+    cfg: dict,
+    runs_dir: str,
+    resume_from: Path | None = None,
+) -> Path:
+    """Create or reuse runs/<benchmark>/<cell>/seed_<n>_<timestamp>/.
+
+    When ``resume_from`` is given, that directory is reused as-is — no new
+    timestamped dir, no overwrite of the snapshotted config (the saved
+    config is the source of truth for the resumed run).
+    """
+    if resume_from is not None:
+        run_dir = Path(resume_from)
+        if not run_dir.exists():
+            raise FileNotFoundError(f"resume-from dir not found: {run_dir}")
+        return run_dir
+
     benchmark = Path(config_path).stem
     cell_name = cfg["cell"]["name"]
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -162,7 +207,7 @@ def make_run_dir(config_path: str, cfg: dict, runs_dir: str) -> Path:
     return run_dir
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="path to YAML config")
     parser.add_argument("--seed", type=int, default=None, help="override config seed")
@@ -179,37 +224,90 @@ def main() -> None:
         help="override LMU/GatedLMU theta hyperparameter (no effect on other cells)",
     )
     parser.add_argument("--runs-dir", default="runs", help="root dir for run outputs")
+    parser.add_argument(
+        "--resume-from", default=None,
+        help="reuse this existing run dir; load latest.pt and continue training "
+             "until total_timesteps (no new timestamped dir is created)",
+    )
+    parser.add_argument(
+        "--save-freq-steps", type=int, default=50_000,
+        help="env-step interval between resumable-checkpoint saves "
+             "(default 50_000 ≈ <1 min of work on a 3070 Ti)",
+    )
+    parser.add_argument(
+        "--stop-file", default=None,
+        help="additional path the trainer polls for a graceful-stop signal. "
+             "Always also polls <run_dir>/STOP. Touch any of these files to "
+             "trigger a final checkpoint + clean exit.",
+    )
+    parser.add_argument(
+        "--device", default=None,
+        help="device override: 'cuda', 'mps', 'cpu', or 'auto'. Default "
+             "honors MEMRL_DEVICE env var, then falls back to 'auto' which "
+             "picks cuda → mps → cpu. (SB3's built-in 'auto' skips MPS, so "
+             "use this on Macs.)",
+    )
     args = parser.parse_args()
 
-    with open(args.config) as f:
-        cfg: dict[str, Any] = yaml.safe_load(f)
+    # Apply GPU/CPU perf defaults (TF32, cudnn benchmark, thread cap). These
+    # are no-ops if the corresponding MEMRL_* env vars disable them.
+    perf = apply_perf_defaults()
+    device = resolve_device(args.device)
+    print(f"  perf: device={device} ({perf['device_name']}) "
+          f"tf32={perf['tf32']} cudnn_benchmark={perf['cudnn_benchmark']} "
+          f"torch_threads={perf['torch_threads']}")
 
-    if args.seed is not None:
-        cfg["seed"] = args.seed
-    if args.total_timesteps is not None:
-        cfg["total_timesteps"] = args.total_timesteps
-    if args.cell is not None:
-        if args.cell not in CELL_REGISTRY:
-            raise ValueError(
-                f"Unknown --cell {args.cell!r}. Available: {sorted(CELL_REGISTRY)}"
+    resume = args.resume_from is not None
+    if resume:
+        # When resuming, the snapshotted config inside the run dir is the
+        # source of truth. CLI overrides for --seed/--cell/--theta are
+        # ignored to keep the resumed run faithful; --total-timesteps still
+        # works because the user might want to extend a run.
+        resume_dir = Path(args.resume_from)
+        cfg_path_to_load = resume_dir / "config.yaml"
+        if not cfg_path_to_load.exists():
+            raise FileNotFoundError(
+                f"resume-from dir has no config.yaml: {cfg_path_to_load}"
             )
-        cfg["cell"]["name"] = args.cell
-        # When the user overrides the cell, replace the cell.kwargs with this
-        # cell's defaults — the YAML's kwargs are for the YAML's cell, not
-        # the override.
-        cfg["cell"]["kwargs"] = DEFAULT_CELL_KWARGS[args.cell].copy()
-    if args.theta is not None:
-        # Apply theta override (LMU/GatedLMU). Silently no-op for cells
-        # that don't accept theta in their kwargs.
-        if "theta" in cfg["cell"].get("kwargs", {}):
-            cfg["cell"]["kwargs"]["theta"] = args.theta
-        else:
-            # Cell doesn't take theta — warn but don't crash so the same
-            # launcher script can be reused across cells.
-            print(f"  [warn] --theta {args.theta} ignored: {cfg['cell']['name']} doesn't accept theta")
+        with open(cfg_path_to_load) as f:
+            cfg: dict[str, Any] = yaml.safe_load(f)
+        if args.total_timesteps is not None:
+            cfg["total_timesteps"] = args.total_timesteps
+        if any(x is not None for x in (args.seed, args.cell, args.theta)):
+            print("  [resume] ignoring --seed/--cell/--theta — using saved config.")
+    else:
+        with open(args.config) as f:
+            cfg: dict[str, Any] = yaml.safe_load(f)
 
-    run_dir = make_run_dir(args.config, cfg, args.runs_dir)
-    print(f"Run dir: {run_dir}")
+        if args.seed is not None:
+            cfg["seed"] = args.seed
+        if args.total_timesteps is not None:
+            cfg["total_timesteps"] = args.total_timesteps
+        if args.cell is not None:
+            if args.cell not in CELL_REGISTRY:
+                raise ValueError(
+                    f"Unknown --cell {args.cell!r}. Available: {sorted(CELL_REGISTRY)}"
+                )
+            cfg["cell"]["name"] = args.cell
+            # When the user overrides the cell, replace the cell.kwargs with this
+            # cell's defaults — the YAML's kwargs are for the YAML's cell, not
+            # the override.
+            cfg["cell"]["kwargs"] = DEFAULT_CELL_KWARGS[args.cell].copy()
+        if args.theta is not None:
+            # Apply theta override (LMU/GatedLMU). Silently no-op for cells
+            # that don't accept theta in their kwargs.
+            if "theta" in cfg["cell"].get("kwargs", {}):
+                cfg["cell"]["kwargs"]["theta"] = args.theta
+            else:
+                # Cell doesn't take theta — warn but don't crash so the same
+                # launcher script can be reused across cells.
+                print(f"  [warn] --theta {args.theta} ignored: {cfg['cell']['name']} doesn't accept theta")
+
+    run_dir = make_run_dir(
+        args.config, cfg, args.runs_dir,
+        resume_from=Path(args.resume_from) if resume else None,
+    )
+    print(f"Run dir: {run_dir}{' (resume)' if resume else ''}")
 
     env = make_vec_env(
         env_name=cfg["env_name"],
@@ -253,7 +351,14 @@ def main() -> None:
         tensorboard_log=str(run_dir),
         verbose=1,
         seed=cfg["seed"],
+        device=device,
     )
+
+    # Note: torch.compile (MEMRL_COMPILE=1) is applied AFTER load_checkpoint
+    # below, not here. Compiled wrappers add an `_orig_mod.` prefix to state
+    # dict keys; loading an un-compiled checkpoint into a pre-compiled
+    # policy would mismatch. Loading first, then compiling, keeps both
+    # cold-start and resume paths working.
 
     # EvalCallback: periodic deterministic-policy eval on a held-out env.
     # eval_freq is in vec-env steps (one rollout = n_steps vec steps), so this
@@ -276,10 +381,76 @@ def main() -> None:
         verbose=1,
     )
 
-    model.learn(total_timesteps=cfg["total_timesteps"], callback=eval_cb)
+    # Resumable checkpoint: writes <run_dir>/latest.pt every save_freq_steps,
+    # and on SIGINT / <run_dir>/STOP (or any --stop-file) flushes a final
+    # save and signals SB3 to unwind cleanly.
+    extra_stop = [args.stop_file] if args.stop_file else []
+    ckpt_cb = ResumableCheckpointCallback(
+        save_path=run_dir,
+        save_freq_steps=args.save_freq_steps,
+        extra_stop_files=extra_stop,
+        verbose=1,
+    )
+
+    callbacks = CallbackList([eval_cb, ckpt_cb])
+
+    if resume:
+        loaded_steps = load_checkpoint(run_dir, model)
+        # Compile AFTER load so state-dict keys match the un-compiled save.
+        maybe_compile_policy(model.policy)
+        if loaded_steps >= cfg["total_timesteps"]:
+            print(f"  [resume] loaded @ step {loaded_steps:,}; already at/past "
+                  f"total_timesteps ({cfg['total_timesteps']:,}). Marking DONE.")
+            (run_dir / "DONE").touch()
+            return 0
+        # Reset envs + cell state on resume.
+        #
+        # Why: we faithfully restore the LEARNING state (policy weights,
+        # optimizer moments, num_timesteps, RNG) so PPO continues improving
+        # from where it left off. We do NOT try to resume in-progress
+        # episodes — VecEnv child envs can't be snapshotted across
+        # processes, and the SB3 Monitor wrapper enforces reset-before-step
+        # anyway. So resume creates a clean episode boundary in each env;
+        # cell state zeros out and the next rollout rebuilds context. For
+        # PPO over POPGym (episodes ≤1200 steps, rollouts of 8192) this
+        # costs at most one in-progress episode of throughput per pause —
+        # negligible vs. a multi-hour run.
+        model._last_obs            = model.env.reset()
+        model._last_episode_starts = np.ones((model.env.num_envs,), dtype=bool)
+        model._cell_state          = model.policy.initial_state(
+            model.env.num_envs, model.device,
+        )
+        print(f"  [resume] loaded @ step {loaded_steps:,}; envs + cell state "
+              f"reset (clean episode boundary).")
+
+        # Train the REMAINING steps. SB3 with reset_num_timesteps=False
+        # interprets total_timesteps as a delta added to num_timesteps —
+        # so passing (target - loaded) gets us the right stop condition.
+        remaining = cfg["total_timesteps"] - loaded_steps
+        model.learn(
+            total_timesteps=remaining,
+            callback=callbacks,
+            reset_num_timesteps=False,
+        )
+    else:
+        # Fresh start: compile (if enabled) before learn(). The first
+        # iteration will be slow as Inductor traces and codegens; subsequent
+        # ones reuse the cached kernels.
+        maybe_compile_policy(model.policy)
+        model.learn(total_timesteps=cfg["total_timesteps"], callback=callbacks)
+
+    # If we exited because of a pause signal, don't overwrite the meaningful
+    # final_model save — `latest.pt` is the resumable artifact. Exit code 0
+    # signals "paused cleanly, resume me" to the runner.
+    if ckpt_cb._stop_requested:
+        print(f"  [paused] checkpoint saved to {run_dir / 'latest.pt'}. "
+              f"Re-run with --resume-from {run_dir} to continue.")
+        return 0
+
     model.save(str(run_dir / "final_model"))
     print(f"Done. Final model saved to {run_dir / 'final_model.zip'}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
