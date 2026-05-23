@@ -55,33 +55,104 @@ from memrl.cell.lmu import _legs_matrices, _legt_zoh_matrices
 # ---------------------------------------------------------------------------
 
 class _HebbianMemory(nn.Module):
-    """Outer-product key-value associative memory.
+    """Outer-product key-value associative memory with selectable update rule.
 
-    Write:  k = φ(W_K x),  v = W_V x
-            M ← M + k⊗v / A
-    Read:   q = φ(W_Q h)
-            r = LN(M · q)  →  W_r  →  R^H
+    Convention: M ∈ (B, A, A) with M[b, k_idx, v_idx]. Reading with query q
+    contracts the key dim:  r[b, v] = Σ_k M[b, k, v] · q[b, k].
 
-    φ = L2-normalise. Retrieval M·k_τ ≈ v_τ when keys are near-orthogonal;
-    interference from T entries is O(T/√A), kept bounded by LayerNorm.
+    Modes:
+      additive        M ← M + (k ⊗ v) / A
+                      Pure Hebbian. Unbounded interference O(T/A) — collapses
+                      at long horizons.
+      delta           M ← M + (v − M k) ⊗ k          (β = α = 1)
+                      DeltaNet (Schlag 2021 / Yang 2024). Targeted overwrite
+                      at the queried key; |I − k kᵀ|₂ = 1 with L2-normed k.
+      gated_delta     M ← α(h)·M + β(h)·(v − M k) ⊗ k
+                      Gated DeltaNet (Yang 2025). α decays globally; β controls
+                      write strength. Both from hidden state.
+      gated_delta_eps M ← α(h)·M + σ(a·ε_mem − b)·(v − M k) ⊗ k
+                      Recommended. α from h; β driven by memory-conditioned
+                      curiosity ε_mem = mean((v − M·k)²) — write strongly only
+                      when the store can't already retrieve the current value.
+
+    ε_mem is always computed (even for "additive") and returned as a side
+    output so ablations can compare innovation signals across modes.
     """
 
-    def __init__(self, input_size: int, hidden_size: int, assoc_size: int) -> None:
+    MODES = ("additive", "delta", "gated_delta", "gated_delta_eps")
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        assoc_size: int,
+        mode: str = "gated_delta_eps",
+    ) -> None:
         super().__init__()
+        if mode not in self.MODES:
+            raise ValueError(f"Unknown hebbian mode {mode!r}. Choose from {self.MODES}.")
+        self.mode = mode
         self.assoc_size = assoc_size
-        self.W_K = nn.Linear(input_size,  assoc_size, bias=False)
-        self.W_V = nn.Linear(input_size,  assoc_size, bias=False)
-        self.W_Q = nn.Linear(hidden_size, assoc_size, bias=False)
+
+        # Shared K/V/Q heads + read projection
+        self.W_K  = nn.Linear(input_size,  assoc_size, bias=False)
+        self.W_V  = nn.Linear(input_size,  assoc_size, bias=False)
+        self.W_Q  = nn.Linear(hidden_size, assoc_size, bias=False)
         self.ln_r = nn.LayerNorm(assoc_size)
         self.W_r  = nn.Linear(assoc_size, hidden_size, bias=False)
         for m in (self.W_K, self.W_V, self.W_Q, self.W_r):
             nn.init.xavier_normal_(m.weight)
 
-    def write(self, x: Tensor, M: Tensor) -> Tensor:
-        """M ← M + φ(W_K x) ⊗ (W_V x) / A.  Returns (B, A, A)."""
-        k = F.normalize(self.W_K(x), dim=-1)                      # (B, A)
-        v = self.W_V(x)                                            # (B, A)
-        return M + k.unsqueeze(-1) * v.unsqueeze(-2) / self.assoc_size
+        # Mode-specific gate parameters
+        if mode in ("gated_delta", "gated_delta_eps"):
+            # α: decay gate, init to σ(4)≈0.98 → preserve memory by default
+            self.W_alpha = nn.Linear(hidden_size, 1, bias=True)
+            nn.init.zeros_(self.W_alpha.weight)
+            nn.init.constant_(self.W_alpha.bias, 4.0)
+        if mode == "gated_delta":
+            # β: write gate, init to σ(0)=0.5 → moderate write rate
+            self.W_beta = nn.Linear(hidden_size, 1, bias=True)
+            nn.init.xavier_normal_(self.W_beta.weight, gain=0.1)
+            nn.init.zeros_(self.W_beta.bias)
+        if mode == "gated_delta_eps":
+            # β = σ(a·ε_mem − b). Init a=1, b=0 — let optimizer find the threshold.
+            self.a_M = nn.Parameter(torch.tensor(1.0))
+            self.b_M = nn.Parameter(torch.tensor(0.0))
+
+    def write(
+        self,
+        x: Tensor,           # (B, C)
+        h_n: Tensor,         # (B, H) pre-normed hidden, drives α / β when learned
+        M: Tensor,           # (B, A, A)
+    ) -> tuple[Tensor, Tensor]:
+        """Returns (M_new, ε_mem).  ε_mem ∈ (B,) for diagnostics + β gating."""
+        k = F.normalize(self.W_K(x), dim=-1)                       # (B, A)
+        v = self.W_V(x)                                             # (B, A)
+
+        # Prediction error against M_{t-1} (memory-conditioned curiosity)
+        p       = torch.einsum("bkv,bk->bv", M, k)                  # (B, A) predicted v at k
+        delta_v = v - p                                              # (B, A)
+        eps_mem = delta_v.pow(2).mean(-1)                           # (B,)  scale-normalised
+
+        if self.mode == "additive":
+            M_new = M + k.unsqueeze(-1) * v.unsqueeze(-2) / self.assoc_size
+            return M_new, eps_mem
+
+        # Delta update: M[b,k,v] += β · k[b,k] · delta_v[b,v]
+        update = k.unsqueeze(-1) * delta_v.unsqueeze(-2)            # (B, A, A)
+
+        if self.mode == "delta":
+            M_new = M + update
+        elif self.mode == "gated_delta":
+            alpha = torch.sigmoid(self.W_alpha(h_n)).squeeze(-1)    # (B,)
+            beta  = torch.sigmoid(self.W_beta(h_n)).squeeze(-1)     # (B,)
+            M_new = alpha.view(-1, 1, 1) * M + beta.view(-1, 1, 1) * update
+        else:  # gated_delta_eps
+            alpha = torch.sigmoid(self.W_alpha(h_n)).squeeze(-1)    # (B,)
+            beta  = torch.sigmoid(self.a_M * eps_mem - self.b_M)    # (B,)
+            M_new = alpha.view(-1, 1, 1) * M + beta.view(-1, 1, 1) * update
+
+        return M_new, eps_mem
 
     def read(self, h_normed: Tensor, M: Tensor) -> Tensor:
         """LN(M · φ(W_Q h)) → W_r.  Returns (B, H)."""
@@ -103,6 +174,9 @@ class DTHLMU(RecurrentCell):
         n_scales:           K  multi-scale banks in the fast cell
         scale_factor:       fast-cell θ spacing: [θ·sf^k for k in offsets]
         assoc_size:         A  Hebbian key/value dimension
+        hebbian_mode:       Hebbian update rule — one of
+                            {"additive", "delta", "gated_delta", "gated_delta_eps"}.
+                            Default "gated_delta_eps": α(h)·M + σ(a·ε_mem − b)·delta.
         residual_scale:     ε  fast-cell anti-collapse weight
         readout_skip_scale: α  fast-cell u_x skip weight on readout
     """
@@ -116,6 +190,7 @@ class DTHLMU(RecurrentCell):
         n_scales: int     = 3,
         scale_factor: float = 2.0,
         assoc_size: int   = 64,
+        hebbian_mode: str = "gated_delta_eps",
         residual_scale: float      = 0.05,
         readout_skip_scale: float  = 0.1,
     ) -> None:
@@ -171,7 +246,8 @@ class DTHLMU(RecurrentCell):
         self.W_ql   = nn.Linear(hidden_size, memory_size, bias=False)
 
         # ── Hebbian memory ──────────────────────────────────────────────────
-        self.hebbian = _HebbianMemory(input_size, hidden_size, assoc_size)
+        self.hebbian = _HebbianMemory(input_size, hidden_size, assoc_size,
+                                      mode=hebbian_mode)
 
         # ── Hidden update ───────────────────────────────────────────────────
         self.ln_h = nn.LayerNorm(hidden_size)
@@ -293,8 +369,8 @@ class DTHLMU(RecurrentCell):
 
         # ── Hebbian M ───────────────────────────────────────────────────────
 
-        M_     = self.hebbian.write(x, M)
-        r_h    = self.hebbian.read(h_n, M_)                    # (B, H)
+        M_, eps_mem = self.hebbian.write(x, h_n, M)
+        r_h         = self.hebbian.read(h_n, M_)               # (B, H)
 
         # ── Hidden update ───────────────────────────────────────────────────
 
@@ -307,7 +383,7 @@ class DTHLMU(RecurrentCell):
         return h_, {
             "h": h_, "m_f": m_f_, "m_s": m_s_,
             "m_legs": m_l_, "t": t_, "M": M_,
-        }, {"innovation": innov}
+        }, {"innovation": innov, "eps_mem": eps_mem}
 
     @staticmethod
     def _softsign(x: Tensor) -> Tensor:

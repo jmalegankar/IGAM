@@ -1,16 +1,7 @@
-# 15M suite — DTH-LMU on RepeatPreviousMedium.
-# Fast LMU (K=3 scales, θ=100) provides recency-selective working memory;
-# this task is primarily a recency test so the fast cell carries the load.
-# θ_s = 100²/32 = 312 provides medium-range statistics as a fallback.
-# LR matches GRU/GatedLMU configs for RP-Medium.
-
-env_name: popgym-RepeatPreviousMedium-v0
+env_name: popgym-CountRecallMedium-v0
 n_envs: 8
-
-total_timesteps: 15_000_000
-
+total_timesteps: 5000000
 seed: 0
-
 cell:
   name: DTHLMU
   kwargs:
@@ -22,21 +13,17 @@ cell:
     hebbian_mode: gated_delta_eps
     residual_scale: 0.05
     readout_skip_scale: 0.1
-
 encoder_dim: 64
 encoder_hidden: 128
-
-lr: 2.0e-4
+lr: 0.0002
 target_kl: 0.03
-
 n_steps: 1024
-n_epochs: 10
+n_epochs: 4
 gamma: 0.99
 gae_lambda: 0.95
 clip_range: 0.2
 ent_coef: 0.01
 vf_coef: 0.5
 max_grad_norm: 0.5
-
 chunk_len: 32
 n_chunks_per_batch: 8

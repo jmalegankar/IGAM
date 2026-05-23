@@ -1,16 +1,7 @@
-# 15M suite — DTH-LMU on BattleshipEasy.
-# Hebbian M with learned spatial keys stores board state (hit/miss per cell).
-# θ=64: fast LMU window covers recent actions; θ_s = 64²/32 = 128 covers the
-# episode length (100 shots max) so slow LegT accumulates board statistics.
-# LR and KL match GatedLMU Battleship config.
-
 env_name: popgym-BattleshipEasy-v0
 n_envs: 8
-
-total_timesteps: 15_000_000
-
+total_timesteps: 15000000
 seed: 0
-
 cell:
   name: DTHLMU
   kwargs:
@@ -19,16 +10,13 @@ cell:
     n_scales: 3
     scale_factor: 2.0
     assoc_size: 64
-    hebbian_mode: gated_delta_eps
+    hebbian_mode: additive
     residual_scale: 0.05
     readout_skip_scale: 0.1
-
 encoder_dim: 64
 encoder_hidden: 128
-
-lr: 1.0e-4
+lr: 0.0001
 target_kl: 0.02
-
 n_steps: 1024
 n_epochs: 10
 gamma: 0.99
@@ -37,6 +25,5 @@ clip_range: 0.2
 ent_coef: 0.01
 vf_coef: 0.5
 max_grad_norm: 0.5
-
 chunk_len: 32
 n_chunks_per_batch: 8

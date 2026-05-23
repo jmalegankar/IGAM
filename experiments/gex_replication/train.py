@@ -62,7 +62,8 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "SelectiveLMU": {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum",
                      "n_scales": 3, "scale_factor": 2.0, "readout_skip_scale": 0.1},
     "DTHLMU":       {"memory_size": 32, "theta": 100.0, "n_scales": 3,
-                     "scale_factor": 2.0, "assoc_size": 64},
+                     "scale_factor": 2.0, "assoc_size": 64,
+                     "hebbian_mode": "gated_delta_eps"},
 }
 
 

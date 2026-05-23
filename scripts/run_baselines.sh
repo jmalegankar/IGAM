@@ -27,7 +27,7 @@ run() {
 # # ── AutoencodeMedium ──────────────────────────────────────────────────────────
 # run gru_autoencode_medium_15M   autoencode_medium_15M
 # run lstm_autoencode_medium_15M  autoencode_medium_15M
-# run s4d_autoencode_medium_15M   autoencode_medium_15M
+run s4d_autoencode_medium_15M   autoencode_medium_15M
 
 # # ── CountRecallMedium ─────────────────────────────────────────────────────────
 # run gru_countrecall_medium_15M   countrecall_medium_15M
@@ -36,8 +36,8 @@ run() {
 
 # # ── RepeatPreviousMedium ──────────────────────────────────────────────────────
 # run gru_repeat_previous_medium_15M   repeat_previous_medium_15M
-run lstm_repeat_previous_medium_15M  repeat_previous_medium_15M
-run s4d_repeat_previous_medium_15M   repeat_previous_medium_15M
+# run lstm_repeat_previous_medium_15M  repeat_previous_medium_15M
+# run s4d_repeat_previous_medium_15M   repeat_previous_medium_15M
 
 # # ── BattleshipEasy ────────────────────────────────────────────────────────────
 # run gru_battleship_easy_15M   battleship_easy_15M
