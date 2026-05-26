@@ -78,6 +78,7 @@ from memrl.cell import (
     LSTM,
     SHM,
     DeltaNet,
+    GatedDeltaNet,
     GatedLMU,
     LinearTransformer,
     Mamba2,
@@ -88,6 +89,7 @@ from memrl.cell import (
     mLSTM,
 )
 from memrl.envs import make_vec_env
+from memrl.exploration import make_intrinsic
 from memrl.ppo import MemPPO
 from memrl.utils import (
     ResumableCheckpointCallback,
@@ -112,6 +114,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "GatedLMU": GatedLMU,
     "SelectiveLMU": SelectiveLMU,
     "DTHLMU": DTHLMU,
+    "GatedDeltaNet": GatedDeltaNet,
     "SHM": SHM,
 }
 
@@ -134,6 +137,7 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "DTHLMU":            {"memory_size": 32, "theta": 100.0, "n_scales": 3,
                           "scale_factor": 2.0, "assoc_size": 64,
                           "hebbian_mode": "gated_delta_eps"},
+    "GatedDeltaNet":     {"assoc_size": 64},   # single-layer, RL convention
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
 }
 
@@ -156,6 +160,57 @@ def make_cell_factory(cell_name: str, cell_kwargs: dict[str, Any], hidden_size: 
         return cls(input_size=input_size, **kwargs)
 
     return factory
+
+
+def _flat_obs_dim(env) -> int:
+    """Discover the flattened observation dimension by reading the obs space.
+
+    Handles Discrete / MultiDiscrete / Box. Used to size RND / E3B / etc.'s
+    encoder networks.
+    """
+    import gymnasium as gym
+    sp = env.observation_space
+    if isinstance(sp, gym.spaces.Discrete):
+        return 1                                 # represented as scalar int
+    if isinstance(sp, gym.spaces.MultiDiscrete):
+        return int(len(sp.nvec))
+    if isinstance(sp, gym.spaces.Box):
+        return int(np.prod(sp.shape))
+    raise ValueError(f"Unsupported obs space for intrinsic encoder: {sp}")
+
+
+def _n_actions(env) -> int:
+    """Discover Discrete action vocab size (ICM needs this)."""
+    import gymnasium as gym
+    sp = env.action_space
+    if isinstance(sp, gym.spaces.Discrete):
+        return int(sp.n)
+    if isinstance(sp, gym.spaces.MultiDiscrete):
+        return int(np.prod(sp.nvec))
+    return 0    # continuous — ICM not supported
+
+
+def _build_intrinsic_module(cfg: dict, env):
+    """Instantiate the configured exploration module.
+
+    YAML schema:
+        intrinsic: "none" | "rnd" | "e3b_rand" | "e3b_obs" | "e3b_innov" | "noveld" | "icm"
+        intrinsic_kwargs: {...}   # forwarded to the module ctor (lambda_reg, hidden_dim, etc.)
+
+    Returns None if "none" or unspecified.
+    """
+    name = cfg.get("intrinsic", "none")
+    if name in (None, "none", "None"):
+        return None
+    kwargs = dict(cfg.get("intrinsic_kwargs", {}))
+    return make_intrinsic(
+        name,
+        n_envs=cfg["n_envs"],
+        obs_dim=_flat_obs_dim(env),
+        n_actions=_n_actions(env),
+        device="cpu",       # MemPPO moves it as needed via .to() on its modules
+        **kwargs,
+    )
 
 
 def make_run_dir(
@@ -343,6 +398,9 @@ def main() -> int:
         vf_coef=cfg.get("vf_coef", 0.5),
         max_grad_norm=cfg.get("max_grad_norm", 0.5),
         target_kl=cfg.get("target_kl"),
+        lambda_intrinsic=cfg.get("lambda_intrinsic", 0.0),
+        intrinsic_module=_build_intrinsic_module(cfg, env),
+        intrinsic_source=cfg.get("intrinsic_source", "eps_mem"),
         encoder_dim=cfg["encoder_dim"],
         encoder_hidden=cfg.get("encoder_hidden", 128),
         shared_backbones=cfg.get("shared_backbones", False),   # default = Option A

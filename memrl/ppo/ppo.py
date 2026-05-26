@@ -66,6 +66,9 @@ class MemPPO(PPO):
         vf_coef: float = 0.5,
         max_grad_norm: float = 0.5,
         target_kl: Optional[float] = None,
+        lambda_intrinsic: float = 0.0,
+        intrinsic_module: Optional["IntrinsicRewardModule"] = None,
+        intrinsic_source: str = "eps_mem",         # back-compat, used iff module=None
         encoder_dim: int = 64,
         encoder_hidden: int = 128,
         shared_backbones: bool = False,
@@ -83,6 +86,27 @@ class MemPPO(PPO):
         self.shared_backbones = shared_backbones
         self.chunk_len = chunk_len
         self.n_chunks_per_batch = n_chunks_per_batch
+
+        # Intrinsic reward — uniform interface via the IntrinsicRewardModule
+        # abstraction (see memrl/exploration/). When module is provided AND
+        # lambda > 0, per-step bonus is added to extrinsic reward BEFORE the
+        # rollout buffer ingests it (stop-grad is automatic — rewards are
+        # numpy). Episodic modules (E3B, NovelD) have reset_envs() called on
+        # episode boundaries; lifelong modules (RND, ICM) get .update() called
+        # per rollout on the buffer.
+        #
+        # Legacy back-compat: if intrinsic_module=None but lambda > 0, falls
+        # back to reading a named side output (default "eps_mem"). This path
+        # is preserved for any old code paths but new work should pass an
+        # explicit module.
+        self.lambda_intrinsic = float(lambda_intrinsic)
+        self.intrinsic_module = intrinsic_module
+        self.intrinsic_source = intrinsic_source
+        if self.lambda_intrinsic > 0 and self.intrinsic_module is None:
+            from stable_baselines3.common.running_mean_std import RunningMeanStd
+            self.intrinsic_rms = RunningMeanStd(shape=())
+        else:
+            self.intrinsic_rms = None
 
         # SB3 PPO wants a batch_size; we don't use it for sampling (we use
         # n_chunks_per_batch) but it has to be set to something consistent
@@ -252,6 +276,44 @@ class MemPPO(PPO):
             new_obs, rewards, dones, infos = env.step(actions_np)
             self.num_timesteps += env.num_envs
 
+            # Intrinsic reward shaping. Three paths in priority order:
+            #   1. `self.intrinsic_module` provided → use the uniform abstraction
+            #      (recommended). Module returns sanitized (n_envs,) np.float32.
+            #   2. Legacy: `lambda_intrinsic > 0` and a named side output exists
+            #      → use built-in running-std normalisation.
+            #   3. Otherwise: no intrinsic reward.
+            if self.intrinsic_module is not None and self.lambda_intrinsic > 0:
+                bonus = self.intrinsic_module.compute(
+                    obs=new_obs,
+                    last_obs=self._last_obs,
+                    action=actions_np,
+                    episode_start=self._last_episode_starts,
+                    side=side,
+                    cell_state=self._cell_state,
+                )                                                             # (n_envs,) np.float32
+                rewards = rewards.astype(np.float32) + self.lambda_intrinsic * bonus
+                # Reset per-episode state for envs that just ended an episode.
+                done_ids = [i for i, d in enumerate(dones) if d]
+                if done_ids:
+                    self.intrinsic_module.reset_envs(done_ids)
+                # Lightweight log (per-rollout mean below).
+                if not hasattr(self, "_intrinsic_buf"):
+                    self._intrinsic_buf = []
+                self._intrinsic_buf.append(float(bonus.mean()))
+            elif self.lambda_intrinsic > 0 and self.intrinsic_source in side:
+                # Legacy path — uses side output directly with running-std norm.
+                eps_t = side[self.intrinsic_source].detach()
+                if eps_t.dim() == 0:
+                    eps_t = eps_t.expand(env.num_envs)
+                eps_np = eps_t.cpu().numpy().astype(np.float32)
+                self.intrinsic_rms.update(eps_np)
+                norm = float(np.sqrt(self.intrinsic_rms.var) + 1e-8)
+                intrinsic = (eps_np / norm) * self.lambda_intrinsic
+                rewards = rewards.astype(np.float32) + intrinsic
+                if not hasattr(self, "_intrinsic_buf"):
+                    self._intrinsic_buf = []
+                self._intrinsic_buf.append(float(intrinsic.mean()))
+
             callback.update_locals(locals())
             if not callback.on_step():
                 return False
@@ -314,6 +376,29 @@ class MemPPO(PPO):
             innovation_arr = th.stack(innovation_buf_t).cpu().numpy()
             self.logger.record("debug/innovation_mag_mean", float(innovation_arr.mean()))
             self.logger.record("debug/innovation_mag_max",  float(innovation_arr.max()))
+
+        # Intrinsic reward drain (per-rollout mean of the per-step bonus).
+        if getattr(self, "_intrinsic_buf", None):
+            arr = np.array(self._intrinsic_buf, dtype=np.float32)
+            self.logger.record("debug/intrinsic_reward_mean", float(arr.mean()))
+            self.logger.record("debug/intrinsic_reward_max",  float(arr.max()))
+            if self.intrinsic_rms is not None:
+                self.logger.record("debug/intrinsic_running_std",
+                                   float(np.sqrt(self.intrinsic_rms.var)))
+            self._intrinsic_buf = []
+
+        # Module-specific diagnostics + module update on the just-collected rollout.
+        if self.intrinsic_module is not None:
+            for k, v in self.intrinsic_module.diagnostics().items():
+                self.logger.record(f"intrinsic/{k}", v)
+            try:
+                for k, v in self.intrinsic_module.update(self.rollout_buffer).items():
+                    self.logger.record(f"intrinsic/{k}", v)
+            except Exception as e:
+                # Don't kill training because an exploration module's optional
+                # update path threw; just log and skip.
+                self.logger.record("intrinsic/update_error", 1.0)
+                print(f"[intrinsic] update() failed: {e}")
 
         # Phase-grouped innovation (only for envs that expose info["phase"]).
         # Autoencode reports phase∈{0:WATCH, 1:PLAY}; the WATCH/PLAY ratio of

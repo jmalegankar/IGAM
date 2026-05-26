@@ -1,18 +1,11 @@
 env_name: popgym-CountRecallMedium-v0
 n_envs: 8
-total_timesteps: 100000
+total_timesteps: 2000000
 seed: 0
 cell:
-  name: DTHLMU
+  name: GatedDeltaNet
   kwargs:
-    memory_size: 32
-    theta: 100.0
-    n_scales: 3
-    scale_factor: 2.0
     assoc_size: 64
-    hebbian_mode: gated_delta_eps
-    residual_scale: 0.05
-    readout_skip_scale: 0.1
 encoder_dim: 64
 encoder_hidden: 128
 lr: 0.0002
@@ -27,3 +20,4 @@ vf_coef: 0.5
 max_grad_norm: 0.5
 chunk_len: 32
 n_chunks_per_batch: 8
+intrinsic: none

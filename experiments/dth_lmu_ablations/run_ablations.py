@@ -91,9 +91,15 @@ def write_variant_config(
     mode: str,
     timesteps: int | None = None,
     n_epochs: int | None = None,
+    ent_coef: float | None = None,
+    lambda_intrinsic: float | None = None,
 ) -> Path:
     """Read the base task config, override hebbian_mode + optional knobs,
-    write a per-variant yaml.  Returns the path of the generated file."""
+    write a per-variant yaml.  Returns the path of the generated file.
+
+    Non-default knobs (ent_coef, lambda_intrinsic) get reflected in the
+    filename suffix so sweeps don't overwrite each other's run dirs.
+    """
     base = BENCHMARK_DIR / f"dth_lmu_{task}_15M.yaml"
     if not base.exists():
         raise FileNotFoundError(f"Base config not found: {base}")
@@ -106,10 +112,18 @@ def write_variant_config(
         cfg["total_timesteps"] = int(timesteps)
     if n_epochs is not None:
         cfg["n_epochs"] = int(n_epochs)
+    if ent_coef is not None:
+        cfg["ent_coef"] = float(ent_coef)
+    if lambda_intrinsic is not None:
+        cfg["lambda_intrinsic"] = float(lambda_intrinsic)
 
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-    suffix = f"{int(cfg['total_timesteps']) // 1_000_000}M"
-    out = GENERATED_DIR / f"dth_lmu_{task}_{mode}_{suffix}.yaml"
+    parts = [f"dth_lmu_{task}_{mode}", f"{int(cfg['total_timesteps']) // 1_000_000}M"]
+    if ent_coef is not None:
+        parts.append(f"ent{ent_coef:g}".replace(".", "p"))         # 0.05 → "ent0p05"
+    if lambda_intrinsic is not None:
+        parts.append(f"int{lambda_intrinsic:g}".replace(".", "p")) # 0.1  → "int0p1"
+    out = GENERATED_DIR / ("_".join(parts) + ".yaml")
     with open(out, "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
     return out
@@ -179,6 +193,17 @@ def main() -> None:
         help="Override PPO n_epochs (default 10 in the base configs; 4 is faster)",
     )
     parser.add_argument(
+        "--ent-coef", type=float, default=None,
+        help="Override PPO entropy coefficient (default 0.01 in the base configs; "
+             "0.05 forces more exploration when policy collapses to random behavior).",
+    )
+    parser.add_argument(
+        "--lambda-intrinsic", type=float, default=None,
+        help="Intrinsic-reward scale λ (default 0 = off). The cell's `eps_mem` "
+             "side output is RND-normalised and added to extrinsic reward as "
+             "λ · (eps_mem / σ_running). Try 0.1 to start.",
+    )
+    parser.add_argument(
         "--parallel", type=int, default=1,
         help="Concurrent runs (3070 Ti: 2-3 fits in 8GB VRAM; CPU env-stepping usually bottlenecks first)",
     )
@@ -237,7 +262,9 @@ def main() -> None:
         for mode in args.modes:
             config = write_variant_config(task, mode,
                                           timesteps=args.timesteps,
-                                          n_epochs=args.n_epochs)
+                                          n_epochs=args.n_epochs,
+                                          ent_coef=args.ent_coef,
+                                          lambda_intrinsic=args.lambda_intrinsic)
             for seed in args.seeds:
                 label = f"task={task} mode={mode} seed={seed}"
 
