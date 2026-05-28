@@ -73,8 +73,11 @@ from stable_baselines3.common.callbacks import CallbackList, EvalCallback
 
 from memrl.cell import (
     DTHLMU,
+    FFM,
     GRU,
+    GTrXL,
     LMU,
+    LRU,
     LSTM,
     SHM,
     DeltaNet,
@@ -117,6 +120,9 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "DTHLMU": DTHLMU,
     "GatedDeltaNet": GatedDeltaNet,
     "MultiLayerGatedDeltaNet": MultiLayerGatedDeltaNet,
+    "LRU": LRU,
+    "GTrXL": GTrXL,
+    "FFM": FFM,
     "SHM": SHM,
 }
 
@@ -129,7 +135,7 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "LMU":               {"memory_size": 32, "theta": 64.0},
     "LinearTransformer": {"n_heads": 4},
     "S4D":               {"d_state": 64},
-    "Mamba2":            {"n_heads": 4, "d_state": 64},
+    "Mamba2":            {"n_heads": 4, "d_state": 128},   # d_state=128 → param-parity w/ GRU at enc=64
     "DeltaNet":          {"n_heads": 4},
     "RetNet":            {"n_heads": 4},
     "mLSTM":             {"n_heads": 4},
@@ -141,6 +147,9 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
                           "hebbian_mode": "gated_delta_eps"},
     "GatedDeltaNet":     {"assoc_size": 64},   # single-layer, RL convention
     "MultiLayerGatedDeltaNet": {"n_layers": 2, "assoc_size": 64},
+    "LRU":               {"r_max": 0.999},     # near-unit-circle init for long memory
+    "GTrXL":             {"n_heads": 4, "mem_len": 64},
+    "FFM":               {"memory_size": 16, "context_size": 8},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
 }
 

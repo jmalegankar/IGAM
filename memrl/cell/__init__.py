@@ -12,9 +12,12 @@ from .dth_lmu import DTHLMU
 from .gated_deltanet import GatedDeltaNet
 from .gated_lmu import GatedLMU, SelectiveLMU
 from .multi_gated_deltanet import MultiLayerGatedDeltaNet
+from .ffm import FFM
 from .gru import GRU
+from .gtrxl import GTrXL
 from .linear_transformer import LinearTransformer
 from .lmu import LMU
+from .lru import LRU
 from .lstm import LSTM
 from .mamba2 import Mamba2
 from .mlstm import mLSTM
@@ -36,8 +39,11 @@ __all__ = [
     "MultiLayerGatedDeltaNet",
     "GatedLMU",
     "SelectiveLMU",
+    "FFM",
     "GRU",
+    "GTrXL",
     "LMU",
+    "LRU",
     "LSTM",
     "LinearTransformer",
     "Mamba2",

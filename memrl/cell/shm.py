@@ -42,18 +42,35 @@ Math (per step):
     Read:
         y_t = M_t · q̃_t                                            # (H,)
 
-The random θ_t selection is the KEY trick. Prop 4 of the paper proves
-E[∏ C_t] = 1 when θ_t are independent across t — so memory products
-neither vanish nor explode in expectation. Without the randomness, the
-product is correlated and can diverge (this is what mLSTM's max-trick
-stabilizer fails at).
+The θ_t selection is the KEY trick. Prop 4 of the paper proves E[∏ C_t] = 1
+when θ_t are decorrelated across t — so memory products neither vanish nor
+explode. Without it, the product is correlated and can diverge (what mLSTM's
+max-trick stabilizer fails at).
 
 Bug in the published reference code:
-    Their `retrieve_theta` does `uniform_(0, 1).long()` which always
-    truncates to row 0. Clearly a typo for `uniform_(0, L).long()`.
-    We implement the corrected version using `torch.randint(0, L, ...)`.
+    Their `retrieve_theta` does `uniform_(0, 1).long()` which always truncates
+    to row 0. Clearly a typo for `uniform_(0, L).long()`.
 
-State:        {"M": (B, hidden_size, hidden_size)}
+θ selection — deterministic, PPO-consistent (our change vs the paper):
+    The paper samples θ rows i.i.d.-random per step. That makes the cell
+    STOCHASTIC: two forwards of the same (state, input) differ. In recurrent
+    PPO with TBPTT, the update RE-RUNS the cell over each chunk to recompute
+    log-probs/values; with random θ the recompute diverges from the rollout,
+    injecting noise straight into the importance ratio π_new/π_old. (We
+    verified this empirically — it likely explains SHM's flat AutoencodeMedium
+    curve.)
+
+    Fix: choose the θ row as a deterministic function of a per-env step counter
+    t carried in the cell state:  row_t = (t · 2654435761) mod L  (Knuth
+    multiplicative hash). The counter is replayed at chunk boundaries with the
+    rest of the state, so the recompute reproduces the rollout's exact θ
+    sequence — PPO consistency restored. The hash keeps rows decorrelated
+    across t (Prop-4 condition) and cycles every ~L steps; t resets to 0 at
+    episode boundaries via apply_episode_mask, so each episode replays the same
+    decorrelated sequence. This is faithful in spirit (decorrelated-across-t)
+    while being reproducible — the property recurrent PPO actually needs.
+
+State:        {"M": (B, hidden_size, hidden_size), "t": (B, 1)}
 Side outputs: {}                                    # no innovation analog
 Output:       (B, hidden_size)
 """
@@ -132,6 +149,10 @@ class SHM(RecurrentCell):
                 batch_size, self.mem_size, self.mem_size,
                 device=device, dtype=dtype,
             ),
+            # Per-env step counter driving the deterministic θ selection.
+            # Zeroed by apply_episode_mask at episode boundaries; replayed at
+            # TBPTT chunk boundaries so the PPO recompute reproduces θ exactly.
+            "t": torch.zeros(batch_size, 1, device=device, dtype=dtype),
         }
 
     def step(
@@ -162,9 +183,12 @@ class SHM(RecurrentCell):
         # Scalar write strength.
         eta = torch.sigmoid(self.W_eta(x_normed))                         # (B, 1)
 
-        # Random θ row per sample. CORRECTED from the reference repo's bug
-        # (their `uniform_(0, 1).long()` always returned 0).
-        row_idx = torch.randint(0, self.L, (B,), device=x.device)
+        # Deterministic θ row per sample: row_t = (t · 2654435761) mod L.
+        # Knuth multiplicative hash of the per-env step counter — reproducible
+        # across rollout vs PPO-recompute (so the importance ratio is clean),
+        # decorrelated across t (Prop-4 condition). See module docstring.
+        t = state["t"]                                                    # (B, 1) float
+        row_idx = (t.squeeze(-1).long() * 2654435761) % self.L            # (B,)
         theta = self.theta_matrix[row_idx]                                # (B, H)
 
         # Calibration matrix C = 1 + tanh(θ_t ⊗ vc_t). Outer product gives
@@ -184,4 +208,4 @@ class SHM(RecurrentCell):
         # Output mixing.
         y_out = self.output_ln(self.out_linear(y))                        # (B, H)
 
-        return y_out, {"M": M_new}, {}
+        return y_out, {"M": M_new, "t": t + 1.0}, {}
