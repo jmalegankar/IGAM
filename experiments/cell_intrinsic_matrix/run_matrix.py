@@ -42,6 +42,13 @@ REPO_ROOT     = Path(__file__).resolve().parents[2]
 BENCHMARK_DIR = REPO_ROOT / "benchmarks" / "phase_a" / "ablation"
 GENERATED_DIR = Path(__file__).parent / "_generated"
 
+# Per-cell kwargs come from train.py's DEFAULT_CELL_KWARGS — the SAME table a
+# normal `train.py --cell <X>` run uses — so the sweep can never drift from the
+# canonical per-cell config (e.g. Mamba2 d_state=128 for GRU param-parity, or
+# DTHLMU's gated_delta_eps Hebbian mode). Import rather than re-declare.
+sys.path.insert(0, str(REPO_ROOT))
+from train import DEFAULT_CELL_KWARGS as CELL_DEFAULTS  # noqa: E402
+
 CELLS = ["GatedDeltaNet", "LSTM"]
 INTRINSICS = ["none", "rnd", "e3b_rand", "e3b_obs", "e3b_innov", "noveld", "icm"]
 
@@ -62,19 +69,6 @@ TASK_BASE_CONFIGS: dict[str, Path] = {
 }
 TASKS = list(TASK_BASE_CONFIGS.keys())
 DEFAULT_SEEDS = [0, 1]
-
-# Per-cell default kwargs. Keep in sync with CELL_REGISTRY defaults.
-CELL_DEFAULTS = {
-    "GatedDeltaNet": {"assoc_size": 64},
-    "MultiLayerGatedDeltaNet": {"n_layers": 2, "assoc_size": 64},
-    "LSTM":          {},
-    "GRU":           {},
-    "DTHLMU":        {"memory_size": 32, "theta": 100.0, "n_scales": 3,
-                       "scale_factor": 2.0, "assoc_size": 64,
-                       "hebbian_mode": "gated_delta_eps"},
-    "SelectiveLMU":  {"memory_size": 32, "theta": 100.0, "gate_type": "softsign_sum",
-                       "n_scales": 3, "scale_factor": 2.0, "readout_skip_scale": 0.1},
-}
 
 
 def _base_config_path(task: str) -> Path:

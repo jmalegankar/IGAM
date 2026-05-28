@@ -7,6 +7,7 @@ factories are imported lazily — their upstream packages (and JAX, in the
 case of popgym-arcade) are optional extras.
 """
 
+from .classic_wrappers import is_classic_env
 from .minigrid_wrappers import make_minigrid_vec_env
 from .popgym_wrappers import make_popgym_vec_env
 
@@ -18,6 +19,8 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
         ``popgym-arcade-*``       → popgym-arcade (gymnax/JAX backend)
         ``popgym-*``              → popgym (gymnasium)
         ``MiniGrid-*``            → minigrid
+        ``TMaze-*``               → T-Maze (Passive/Active, Ni et al. 2023)
+        ``POMDP-*`` / classic ids → classic-control (CartPole-v1, masked POMDP)
         memory-gym ids (e.g.      → memory-gym
             ``Endless-*``,
             ``MortarMayhem*``,
@@ -26,7 +29,8 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
 
     Extra ``kwargs`` are forwarded to the per-factory call (e.g.
     ``reset_options=`` for memory-gym, ``partial_obs=``/``obs_size=`` for
-    popgym-arcade). Unrecognized kwargs raise at the factory level.
+    popgym-arcade, ``corridor_length=`` for T-Maze). Unrecognized kwargs raise
+    at the factory level.
     """
     if env_name.startswith("popgym-arcade-"):
         from .popgym_arcade_wrappers import make_popgym_arcade_vec_env
@@ -35,12 +39,19 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
         return make_popgym_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("MiniGrid-"):
         return make_minigrid_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
+    if env_name.startswith("TMaze-"):
+        from .tmaze_wrappers import make_tmaze_vec_env
+        return make_tmaze_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
+    if is_classic_env(env_name):
+        from .classic_wrappers import make_classic_vec_env
+        return make_classic_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if _is_memory_gym(env_name):
         from .memory_gym_wrappers import make_memory_gym_vec_env
         return make_memory_gym_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     raise ValueError(
         f"Unknown env id {env_name!r}. Expected one of: "
-        f"'popgym-arcade-*', 'popgym-*', 'MiniGrid-*', or a memory-gym id "
+        f"'popgym-arcade-*', 'popgym-*', 'MiniGrid-*', 'TMaze-*', a classic id "
+        f"('CartPole-v1', 'POMDP-CartPole-v1', ...), or a memory-gym id "
         f"('Endless-*', 'MortarMayhem*', 'MysteryPath*', 'SearingSpotlights*')."
     )
 
@@ -71,4 +82,5 @@ __all__ = [
     "make_popgym_vec_env",
     "make_minigrid_vec_env",
     "make_vec_env",
+    "is_classic_env",
 ]
