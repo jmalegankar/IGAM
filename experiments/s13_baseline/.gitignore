@@ -1,0 +1,4 @@
+# Runtime artifacts (per-seed launch logs + aggregated results) — not source.
+_logs/
+_results/
+__pycache__/

@@ -225,6 +225,55 @@ def _build_intrinsic_module(cfg: dict, env):
     )
 
 
+def _maybe_init_wandb(cfg: dict, run_dir: Path, enabled: bool,
+                      project: str, entity: str | None):
+    """Start a wandb run that mirrors ALL TensorBoard scalars, or return None.
+
+    We rely on `sync_tensorboard=True`: MemPPO already records everything via
+    SB3's logger (losses, approx_kl, clip_fraction, ep_rew/len, time/fps, the
+    intrinsic/* and debug/* diagnostics), so wandb captures the full set with no
+    extra per-metric plumbing. The full (override-applied) cfg is logged as the
+    run config, and wandb auto-logs system (CPU/GPU/mem) metrics.
+
+    Graceful by design: if wandb isn't installed in the active env (e.g. the
+    anaconda interpreter rather than .venv), logging is skipped with a warning
+    instead of crashing the run. The run id is derived from the (reused-on-
+    resume) run dir, so `--resume-from` continues the SAME wandb run.
+    """
+    if not enabled:
+        return None
+    try:
+        import wandb
+    except ImportError:
+        print("  [wandb] enabled but wandb is not installed in this "
+              "interpreter — skipping logging. (Run under .venv, or "
+              "`pip install wandb`.)")
+        return None
+
+    import re
+    cell = cfg.get("cell", {}).get("name", "cell")
+    intrinsic = cfg.get("intrinsic", "none")
+    seed = cfg.get("seed", 0)
+    env_name = cfg.get("env_name", "env")
+    run_id = re.sub(r"[^A-Za-z0-9_.-]", "-", f"{cell}-{run_dir.name}")[:120]
+    run = wandb.init(
+        project=project,
+        entity=entity,
+        name=f"{cell}-{intrinsic}-seed{seed}",
+        id=run_id,
+        resume="allow",
+        group=env_name,                 # all cells on an env grouped together
+        job_type=cell,
+        tags=[cell, intrinsic, env_name],
+        config=cfg,
+        sync_tensorboard=True,          # ← mirrors every SB3/MemPPO TB scalar
+        dir=str(run_dir),
+    )
+    print(f"  [wandb] project={project!r} run={run.name!r} id={run_id} "
+          f"(sync_tensorboard=on)")
+    return run
+
+
 def make_run_dir(
     config_path: str,
     cfg: dict,
@@ -314,6 +363,24 @@ def main() -> int:
              "picks cuda → mps → cpu. (SB3's built-in 'auto' skips MPS, so "
              "use this on Macs.)",
     )
+    parser.add_argument(
+        "--wandb", action="store_true",
+        help="force-enable Weights & Biases logging (otherwise the config's "
+             "'wandb' key decides). Mirrors all TensorBoard scalars to wandb.",
+    )
+    parser.add_argument(
+        "--no-wandb", action="store_true",
+        help="force-disable wandb even if the config enables it",
+    )
+    parser.add_argument(
+        "--wandb-project", default=None,
+        help="wandb project name (default: config 'wandb_project' or 'memrl')",
+    )
+    parser.add_argument(
+        "--wandb-entity", default=None,
+        help="wandb entity/team (default: config 'wandb_entity', else your "
+             "wandb default entity)",
+    )
     args = parser.parse_args()
 
     # Apply GPU/CPU perf defaults (TF32, cudnn benchmark, thread cap). These
@@ -375,6 +442,17 @@ def main() -> int:
         resume_from=Path(args.resume_from) if resume else None,
     )
     print(f"Run dir: {run_dir}{' (resume)' if resume else ''}")
+
+    # Weights & Biases (optional). Enabled if --wandb or config wandb:true, and
+    # not overridden by --no-wandb. Must init BEFORE learn() so sync_tensorboard
+    # patches the writer in time. Initialized here (pre-model) so it's live for
+    # the whole run, including the resume-already-done early return below.
+    wandb_enabled = (not args.no_wandb) and (args.wandb or bool(cfg.get("wandb", False)))
+    wandb_run = _maybe_init_wandb(
+        cfg, run_dir, wandb_enabled,
+        project=args.wandb_project or cfg.get("wandb_project", "memrl"),
+        entity=args.wandb_entity or cfg.get("wandb_entity"),
+    )
 
     env = make_vec_env(
         env_name=cfg["env_name"],
@@ -472,6 +550,8 @@ def main() -> int:
             print(f"  [resume] loaded @ step {loaded_steps:,}; already at/past "
                   f"total_timesteps ({cfg['total_timesteps']:,}). Marking DONE.")
             (run_dir / "DONE").touch()
+            if wandb_run is not None:
+                wandb_run.finish()
             return 0
         # Reset envs + cell state on resume.
         #
@@ -515,10 +595,14 @@ def main() -> int:
     if ckpt_cb._stop_requested:
         print(f"  [paused] checkpoint saved to {run_dir / 'latest.pt'}. "
               f"Re-run with --resume-from {run_dir} to continue.")
+        if wandb_run is not None:
+            wandb_run.finish()
         return 0
 
     model.save(str(run_dir / "final_model"))
     print(f"Done. Final model saved to {run_dir / 'final_model.zip'}")
+    if wandb_run is not None:
+        wandb_run.finish()
     return 0
 
 
