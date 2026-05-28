@@ -82,6 +82,7 @@ from memrl.cell import (
     GatedLMU,
     LinearTransformer,
     Mamba2,
+    MultiLayerGatedDeltaNet,
     RecurrentCell,
     RetNet,
     S4D,
@@ -115,6 +116,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "SelectiveLMU": SelectiveLMU,
     "DTHLMU": DTHLMU,
     "GatedDeltaNet": GatedDeltaNet,
+    "MultiLayerGatedDeltaNet": MultiLayerGatedDeltaNet,
     "SHM": SHM,
 }
 
@@ -138,6 +140,7 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
                           "scale_factor": 2.0, "assoc_size": 64,
                           "hebbian_mode": "gated_delta_eps"},
     "GatedDeltaNet":     {"assoc_size": 64},   # single-layer, RL convention
+    "MultiLayerGatedDeltaNet": {"n_layers": 2, "assoc_size": 64},
     "SHM":               {"L": 128},   # paper default for easy POPGym tasks
 }
 

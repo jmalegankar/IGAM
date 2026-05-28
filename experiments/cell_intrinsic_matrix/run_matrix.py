@@ -44,17 +44,29 @@ GENERATED_DIR = Path(__file__).parent / "_generated"
 
 CELLS = ["GatedDeltaNet", "LSTM"]
 INTRINSICS = ["none", "rnd", "e3b_rand", "e3b_obs", "e3b_innov", "noveld", "icm"]
-TASKS = [
-    "autoencode_medium",
-    "countrecall_medium",
-    "battleship_easy",
-    "repeat_previous_medium",
-]
+
+# Tasks → base-config templates. Each template carries the *task-tuned* PPO
+# HPs (lr, n_steps, n_envs, encoder dims, etc.); the runner only swaps in the
+# `cell` block and adds the `intrinsic` field.
+#   - POPGym tasks: use the DTH-LMU 15M configs as templates (PPO HPs were
+#     tuned for those tasks during the thesis's POPGym chapter).
+#   - MemoryS13: use the thesis's gex_replication/full_system.yaml — the
+#     known-working baseline (φ^rand E3B + GatedLMU achieved 2.75× LMU on it).
+TASK_BASE_CONFIGS: dict[str, Path] = {
+    "autoencode_medium":      BENCHMARK_DIR / "dth_lmu_autoencode_medium_15M.yaml",
+    "countrecall_medium":     BENCHMARK_DIR / "dth_lmu_countrecall_medium_15M.yaml",
+    "battleship_easy":        BENCHMARK_DIR / "dth_lmu_battleship_easy_15M.yaml",
+    "repeat_previous_medium": BENCHMARK_DIR / "dth_lmu_repeat_previous_medium_15M.yaml",
+    "memory_s13":             REPO_ROOT / "experiments" / "gex_replication"
+                              / "configs" / "ablation" / "full_system.yaml",
+}
+TASKS = list(TASK_BASE_CONFIGS.keys())
 DEFAULT_SEEDS = [0, 1]
 
 # Per-cell default kwargs. Keep in sync with CELL_REGISTRY defaults.
 CELL_DEFAULTS = {
     "GatedDeltaNet": {"assoc_size": 64},
+    "MultiLayerGatedDeltaNet": {"n_layers": 2, "assoc_size": 64},
     "LSTM":          {},
     "GRU":           {},
     "DTHLMU":        {"memory_size": 32, "theta": 100.0, "n_scales": 3,
@@ -66,8 +78,12 @@ CELL_DEFAULTS = {
 
 
 def _base_config_path(task: str) -> Path:
-    """The DTH-LMU 15M configs already encode the right PPO HPs per task."""
-    return BENCHMARK_DIR / f"dth_lmu_{task}_15M.yaml"
+    """Pick the right base config template for the task."""
+    if task not in TASK_BASE_CONFIGS:
+        raise ValueError(
+            f"Unknown task '{task}'. Available: {sorted(TASK_BASE_CONFIGS)}"
+        )
+    return TASK_BASE_CONFIGS[task]
 
 
 def write_variant_config(
