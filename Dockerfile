@@ -66,6 +66,8 @@ WORKDIR /workspace/IGAM
 RUN python -m pip install --upgrade pip \
  && python -m pip install ".[wandb]"
 
+ RUN python -m pip install -r requirements.txt
+
 # ── Runtime knobs the run_*.sh scripts read (all overridable at `docker run`) ─
 #   PYTHON   : no .venv in the image, so use the container interpreter.
 #   DEVICE   : GPU by default; set DEVICE=cpu for a smoke test.
