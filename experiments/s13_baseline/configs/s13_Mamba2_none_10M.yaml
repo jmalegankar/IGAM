@@ -6,10 +6,11 @@ cell:
   name: Mamba2
   kwargs:
     n_heads: 4
-    d_state: 128
+    d_state: 64
+    expand: 2
 encoder_dim: 128
 encoder_hidden: 256
-lr: 0.0003
+lr: 0.00015
 n_steps: 512
 n_epochs: 4
 gamma: 0.999

@@ -61,6 +61,14 @@ CELLS = [
     "GatedDeltaNet", "SHM", "GTrXL",
 ]
 
+# Per-cell hyperparameter overrides — applied AFTER the BASE HPs.
+# Mamba-2 gets a halved learning rate per RLBenchNet (arXiv 2505.15040) and the
+# Mamba-2 codebase's recommendation; at the default 3e-4 the SSM tends to be
+# unstable in PPO. The rest of the cells use BASE['lr'].
+PER_CELL_OVERRIDES: dict[str, dict] = {
+    "Mamba2": {"lr": 1.5e-4},
+}
+
 # S13 reference HPs (thesis full_system.yaml, exploration-key-free).
 BASE = {
     "env_name": "MiniGrid-MemoryS13-v0",
@@ -106,6 +114,7 @@ def build_cfg(cell: str) -> dict:
     if cell not in DEFAULT_CELL_KWARGS:
         raise KeyError(f"{cell} not in train.py DEFAULT_CELL_KWARGS")
     cfg = dict(BASE)
+    cfg.update(PER_CELL_OVERRIDES.get(cell, {}))      # e.g. Mamba-2 lr=1.5e-4
     cfg["cell"] = {"name": cell, "kwargs": dict(DEFAULT_CELL_KWARGS[cell])}
     # Order keys so the file reads cleanly: identity, then cell, then HPs.
     ordered = {

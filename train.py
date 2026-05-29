@@ -135,7 +135,7 @@ DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "LMU":               {"memory_size": 32, "theta": 64.0},
     "LinearTransformer": {"n_heads": 4},
     "S4D":               {"d_state": 64},
-    "Mamba2":            {"n_heads": 4, "d_state": 128},   # d_state=128 → param-parity w/ GRU at enc=64
+    "Mamba2":            {"n_heads": 4, "d_state": 64, "expand": 2},   # full Mamba-2 block (expand=2 + Conv1d + RMSNormGated); d_state=64 paper default — combined with expand=2 it matches the old d_state=128 effective capacity
     "DeltaNet":          {"n_heads": 4},
     "RetNet":            {"n_heads": 4},
     "mLSTM":             {"n_heads": 4},

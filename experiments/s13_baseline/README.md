@@ -13,6 +13,50 @@ Cells (all published architectures — none of our own; DTHLMU/GatedLMU/Selectiv
 are deliberately excluded here):
 **GRU, LSTM, mLSTM, LMU, LRU, Mamba2, FFM, GatedDeltaNet, SHM, GTrXL.**
 
+The SSM/transformer family (**LRU, mLSTM, Mamba-2**) ship as their **full published
+blocks** — pre-LN + recurrent core + the paper's wrappers (LRU: GLU + residual;
+mLSTM: depthwise Conv1d K=4 + GroupNorm + residual; Mamba-2: expand=2 +
+depthwise Conv1d K=4 + RMSNormGated + residual). The plain cells (GRU, LSTM,
+LMU) have no published block to add; they are as the paper defines them.
+
+### Implementation audit (cross-checked against authoritative sources)
+
+The cells have been audited against canonical references to ensure no
+fault-by-implementation. Findings folded back in:
+
+- **Mamba-2** — checked vs `state-spaces/mamba` (`mamba2_simple.py`):
+  - SiLU is applied to the **entire post-conv signal** `[v | B | C]`, not just
+    `v`. The earlier draft only silu'd `v`; fixed.
+  - Default kwargs now `n_heads=4, d_state=64, expand=2, d_conv=4` — paper
+    defaults; combined with `expand=2` this matches the old `d_state=128`
+    effective matrix-memory capacity per head.
+  - **`lr=1.5e-4` for Mamba-2 specifically** (per-cell override) per RLBenchNet
+    (arXiv 2505.15040) and the Mamba codebase's note that the SSM tends toward
+    instability at 3e-4 in PPO; all other cells use 3e-4.
+- **mLSTM** — checked vs `NX-AI/xlstm` (the official xLSTM reference):
+  - **Gate inits were wrong** in the earlier draft. Fixed to match official:
+    `fgate.bias = linspace(3, 6)` across heads (after stabilization this gives
+    "retain by default" / very little new input admitted at init),
+    `igate.bias ~ N(0, 0.1)`, **gate weights zeroed**, gate inputs are
+    `concat(q, k, v)` (not raw `c`).
+  - Output normalization: `nn.GroupNorm(num_groups=n_heads)` is the same
+    operation as the official `MultiHeadLayerNorm` (per-head normalization
+    over `d_head` channels with one set of affine params per channel).
+- **LRU** — block matches Orvieto 2023 §3.4 / Appendix B.2: pre-LN → diagonal
+  complex recurrence → GLU (sigmoid-gated linear) → residual. Ring init formulas
+  exactly per the paper appendix.
+- **The 7 unchanged cells** (GRU, LSTM, LMU, FFM, GatedDeltaNet, SHM, GTrXL)
+  were already validated in their previous incarnations; the LSTM forget bias
+  `=+1` (Jozefowicz 2015), the SHM deterministic-θ PPO fix (avoids the random-θ
+  stochasticity that breaks recurrent PPO), and GTrXL's identity-map reordering
+  + GRU-gated residual (Parisotto 2020) are all in place.
+
+This matches the architectures evaluated in **RLBenchNet** (Wang et al. 2025,
+arXiv 2505.15040), which finds that "only Transformer-XL, Gated Transformer-XL,
+and Mamba-2 successfully solve the most challenging memory-intensive tasks" —
+all three of those are in our roster, plus 7 weaker / different-mechanism cells
+to fill out the substitutability axis.
+
 ## The task regime (important)
 
 S13 here runs with MiniGrid's **random agent spawn** — the `MemoryStartWrapper`
@@ -106,28 +150,30 @@ Runs are grouped by env, tagged by cell/intrinsic, named `<cell>-none-seed<n>`.
 
 ## Per-run cost (reference)
 
-Per (cell, seed), measured on this Mac (CPU, 16 envs). **A 3070 will differ** —
-bigger speedups for the heavier cells (GTrXL, SHM, Mamba2), less for the small
-ones (env stepping + the recurrent scan are partly latency-bound). NB: fps were
-measured at the old `chunk_len=16`; the 10M ETA = 2× the 5M figure and does not
-add the modest `chunk_len=32` overhead — so treat these as lower bounds.
+Per (cell, seed), measured on this Mac (CPU, 16 envs, chunk_len=32). **A 3070
+will differ** — bigger speedups for the heavier cells (GTrXL, Mamba-2, SHM),
+less for the small ones (env stepping is partly latency-bound). The three rows
+flagged `[block]` are the cells now running as their full published block; they
+are slower per step than the cell-core variants they replaced (the published
+wrappers add real compute).
 
 | cell          | params* | fps  | 10M ETA (Mac-CPU) |
 |---------------|--------:|-----:|------------------:|
 | LSTM          | 1.07M   | 1143 | 2.4h |
-| mLSTM         | 0.94M   | 1069 | 2.6h |
 | GRU           | 0.99M   | 1001 | 2.8h |
 | LMU           | 0.88M   | ~1000 (est) | ~2.8h |
-| LRU           | 0.99M   |  966 | 2.9h |
 | FFM           | 0.94M   |  976 | 2.8h |
+| LRU `[block]` | 1.03M   |  825 | 3.4h |
 | GatedDeltaNet | 0.93M   |  597 | 4.7h |
-| Mamba2        | 0.93M   |  462 | 6.0h |
 | SHM           | 0.99M   |  402 | 6.9h |
 | GTrXL         | 1.53M   |  335 | 8.3h |
+| mLSTM `[block]` | 0.97M |  303 | 9.2h |
+| Mamba2 `[block]` | 1.07M | 196 | 14.2h |
 
 \*full policy (encoder + cell + heads). Each per-cell script runs its 3 seeds
 concurrently, so per-cell wall-clock ≈ the table value (a bit more under CPU
-contention); `run_all.sh` (cells serial) ≈ Σ ≈ **~42h Mac-CPU**, far less on GPU.
+contention); `run_all.sh` (cells serial) ≈ Σ ≈ **~57h Mac-CPU**. Mamba-2 alone
+is ~14h/seed here and would benefit most from GPU (expand=2 + matrix-memory).
 
 ## Analyze when done
 

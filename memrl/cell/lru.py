@@ -6,39 +6,56 @@ https://arxiv.org/abs/2303.06349
 A deep-linear diagonal complex recurrence, engineered to match S4/S5 on
 long-range tasks while being conceptually a plain RNN (no HiPPO, no
 discretization of a continuous SSM — the recurrence is defined directly in
-discrete time). Three ingredients make it work:
+discrete time). Three ingredients make the *recurrence* work:
 
-  1. **Diagonal complex state.**  h_t = Λ h_{t-1} + B x_t, Λ = diag(λ) ∈ ℂ^N.
+  1. **Diagonal complex state.**  h_t = Λ h_{t-1} + B u_t, Λ = diag(λ) ∈ ℂ^N.
      Each state dim is an independent scalar complex recurrence.
 
   2. **Stable exponential parameterization.**  λ_j = exp(−exp(ν_j) + i·exp(θ_j)).
      The modulus is |λ_j| = exp(−exp(ν_j)) ∈ (0, 1) for any real ν_j, so the
      recurrence is stable by construction — no projection / clipping needed.
-     ν is the log of the (negative) log-modulus; θ_log is the log-phase.
 
-  3. **Ring initialization + normalization.**  Eigenvalues are initialized in an
-     annulus r_min ≤ |λ| ≤ r_max on the complex plane (phases in [0, max_phase]).
-     For long memory you push r_max → 1. The input is scaled by
-     γ = sqrt(1 − |λ|²) so the hidden state has unit variance at init regardless
-     of where on the ring λ sits (without this, near-unit-circle λ blow the
-     state up).
+  3. **Ring initialization + γ-normalization.**  Eigenvalues init in
+     r_min ≤ |λ| ≤ r_max; input scaled by γ = √(1 − |λ|²) so the state has
+     unit variance at init regardless of where on the ring λ sits.
 
-Math (per step):
-    λ      = exp(−exp(ν) + i·exp(θ_log))         # (N,) complex, |λ| ∈ (0,1)
-    γ      = exp(γ_log) = sqrt(1 − |λ|²)          # (N,) real, input normalizer
-    h_t    = λ ⊙ h_{t-1} + γ ⊙ (B x_t)           # (B, N) complex
-    y_t    = Re(C h_t) + D ⊙ x_t                  # (B, H) real
-    y_out  = LN(W_o y_t)                           # (B, H)
+This file implements the **full LRU block** as published — recurrence wrapped
+with a pre-LayerNorm, a GLU output mixer, and a residual skip — matching
+Orvieto §3.4 / Appendix B.2 ("LRU block in a standard Transformer-style
+architecture"). The FFN sub-block (LN → MLP → +skip) that normally follows
+in the published architecture lives outside the cell, in the policy network.
 
-where B ∈ ℂ^{N×H}, C ∈ ℂ^{H×N}, D ∈ ℝ^H.
+Math (per step, single block):
+
+    Input projection + residual carrier:
+        x_H_t = W_in · x_t                              # (B, H)
+
+    Pre-normalize, then run the diagonal complex recurrence on the H-space input:
+        u_t   = LN(x_H_t)                                # (B, H)
+        λ     = exp(−exp(ν) + i·exp(θ_log))              # (N,)  |λ| ∈ (0,1)
+        γ     = exp(γ_log) = √(1 − |λ|²)                 # (N,)
+        h_t   = λ ⊙ h_{t-1} + γ ⊙ (B u_t)                # (B, N) complex
+        y_t   = Re(C h_t) + D ⊙ u_t                      # (B, H) readout
+
+    GLU output mixer (the "gated linear unit" Orvieto 2023 uses on the readout):
+        z_t       = W_out · y_t                          # (B, 2H)
+        a_t, b_t  = chunk(z_t, 2)                        # each (B, H)
+        g_t       = a_t ⊙ σ(b_t)                          # gated output
+
+    Residual skip — the defining transformer-style block structure:
+        out_t = x_H_t + g_t                              # (B, H)
+
+Where B ∈ ℂ^{N×H}, C ∈ ℂ^{H×N}, D ∈ ℝ^H.
 
 Parameterization / storage (mirrors S4D's real-rep-of-complex convention):
-    ν       ℝ^N            (nu_log; modulus param)
-    θ_log   ℝ^N            (theta_log; phase param)
-    γ_log   ℝ^N            (input normalizer, log-space)
-    B       ℝ^{N×H×2}      (view_as_real of complex)
-    C       ℝ^{H×N×2}      (view_as_real of complex)
-    D       ℝ^H
+    ν        ℝ^N            (nu_log; modulus param)
+    θ_log    ℝ^N            (theta_log; phase param)
+    γ_log    ℝ^N            (input normalizer, log-space)
+    B        ℝ^{N×H×2}      (view_as_real of complex)
+    C        ℝ^{H×N×2}      (view_as_real of complex)
+    D        ℝ^H
+    pre_ln   nn.LayerNorm(H)
+    W_out    nn.Linear(H, 2H, bias=False)               # GLU mixer
 
 Initialization (Orvieto 2023 Appendix):
     u1, u2 ~ U(0,1)^N
@@ -47,16 +64,14 @@ Initialization (Orvieto 2023 Appendix):
     γ_log  = ½ · log(1 − exp(−exp(ν))²)
     B, C   ~ complex Glorot: re,im iid N(0, 1/(2·fan_in))
     D      ~ N(0, 1)
+    W_in, W_out  Xavier uniform
 
 Defaults r_min=0, r_max=1, max_phase=2π are the paper's. For RL memory tasks
 you typically want r_max close to 1 (long memory) — expose as a constructor arg.
 
-Deliberate omissions (match the codebase's cell-vs-block split, see s4d.py):
-  - No parallel scan in forward_sequence; the base loop runs `step` T times.
-    The recurrence is associative, so an associative-scan override is the
-    natural future speedup (Orvieto §3.3).
-  - No block-level GLU/MLP/skip; the LRU *block* in the paper wraps the
-    recurrence with those. We keep recurrence + Linear + LN, as S4D does.
+Param-count note vs the cell-core variant we used previously: replacing
+`(Linear(H,H) + LN(H))` with `(LN(H) + Linear(H,2H))` adds ≈ H² parameters
+(for H=128, about +16K). Tiny relative to ~1M total.
 
 State:        {"h": (B, d_state, 2)}     # complex state, real-rep
 Side outputs: {}
@@ -75,7 +90,7 @@ from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mas
 
 
 class LRU(RecurrentCell):
-    """Linear Recurrent Unit in single-step recurrent form."""
+    """LRU block (recurrence + pre-LN + GLU + residual) in single-step form."""
 
     def __init__(
         self,
@@ -93,9 +108,15 @@ class LRU(RecurrentCell):
         self.d_state = d_state if d_state is not None else hidden_size
         H, N = hidden_size, self.d_state
 
-        # Input projection (encoder dim → H), so B/C/D operate in H-space
-        # regardless of input_size. Mirrors S4D's input_linear.
+        # Input projection (input_size → H) — also serves as the residual
+        # carrier. Bias-free; identity-like at init if input_size == H but
+        # learnable so the block can pre-mix any encoder output.
         self.input_linear = nn.Linear(input_size, H, bias=False)
+
+        # Pre-LayerNorm before the recurrence — the "pre-norm" form of the
+        # LRU block. Residual skip is on the raw projected input, NOT on LN(x),
+        # so the LN sees only the post-residual signal each step.
+        self.pre_ln = nn.LayerNorm(H)
 
         # ── Diagonal Λ parameters (modulus ν, phase θ_log) ───────────────────
         # |λ| = exp(−exp(ν)) ∈ [r_min, r_max]; phase = exp(θ_log) ∈ [0, max_phase].
@@ -119,11 +140,15 @@ class LRU(RecurrentCell):
         self.C = nn.Parameter(torch.view_as_real(C))           # (H, N, 2)
         self.D = nn.Parameter(torch.randn(H))
 
-        # ── Output mixing (cell-level; block GLU/MLP omitted) ────────────────
-        self.output_linear = nn.Linear(H, H, bias=False)
-        self.output_ln = nn.LayerNorm(H)
-        nn.init.xavier_uniform_(self.output_linear.weight)
+        # ── GLU output mixer ────────────────────────────────────────────────
+        # Orvieto §3.4: the LRU readout passes through a gated linear unit
+        # before the residual. Implemented as one Linear(H, 2H) split in
+        # half: y_glu = a · σ(b). Standard GLU (Dauphin 2017), used in the
+        # paper's "GLU" output activation.
+        self.glu_linear = nn.Linear(H, 2 * H, bias=False)
+
         nn.init.xavier_uniform_(self.input_linear.weight)
+        nn.init.xavier_uniform_(self.glu_linear.weight)
 
     def init_state(
         self,
@@ -146,22 +171,31 @@ class LRU(RecurrentCell):
         if episode_start is not None:
             state = apply_episode_mask(state, episode_start)
 
-        # Materialize complex diagonal dynamics.
+        # ── Block input + residual carrier ───────────────────────────────────
+        x_H = self.input_linear(x)                              # (B, H)
+        u = self.pre_ln(x_H)                                    # (B, H) pre-norm
+
+        # ── Materialize complex diagonal dynamics ────────────────────────────
         lam = torch.exp(-torch.exp(self.nu_log)
-                        + 1j * torch.exp(self.theta_log))      # (N,) cfloat
-        gamma = torch.exp(self.gamma_log)                      # (N,) real
-        B_c = torch.view_as_complex(self.B)                    # (N, H) cfloat
-        C_c = torch.view_as_complex(self.C)                    # (H, N) cfloat
+                        + 1j * torch.exp(self.theta_log))       # (N,) cfloat
+        gamma = torch.exp(self.gamma_log)                       # (N,) real
+        B_c = torch.view_as_complex(self.B)                     # (N, H) cfloat
+        C_c = torch.view_as_complex(self.C)                     # (H, N) cfloat
 
-        h_prev = torch.view_as_complex(state["h"])             # (B, N) cfloat
+        h_prev = torch.view_as_complex(state["h"])              # (B, N) cfloat
 
-        # Project encoder input to H channels, then mix into N-dim complex state.
-        u = self.input_linear(x)                               # (B, H) real
-        Bx = u.to(B_c.dtype) @ B_c.t()                         # (B, N) cfloat
+        # ── Recurrence + readout (operates on pre-LN'd input u) ──────────────
+        Bx = u.to(B_c.dtype) @ B_c.t()                          # (B, N) cfloat
         h_new = lam.unsqueeze(0) * h_prev + gamma.unsqueeze(0) * Bx   # (B, N)
+        y = (h_new @ C_c.t()).real + self.D * u                 # (B, H) real
 
-        # Readout: y = Re(C h) + D⊙u.  h (B,N) @ C^T (N,H) = (B,H).
-        y = (h_new @ C_c.t()).real + self.D * u                # (B, H) real
-        y_out = self.output_ln(self.output_linear(y))          # (B, H)
+        # ── GLU output mixer ────────────────────────────────────────────────
+        # Split the 2H projection into (value, gate); sigmoid-gate the value.
+        z = self.glu_linear(y)                                  # (B, 2H)
+        a, b = z.chunk(2, dim=-1)                               # each (B, H)
+        gated = a * torch.sigmoid(b)                            # (B, H)
 
-        return y_out, {"h": torch.view_as_real(h_new)}, {}
+        # ── Residual skip — the defining block structure ────────────────────
+        out = x_H + gated                                        # (B, H)
+
+        return out, {"h": torch.view_as_real(h_new)}, {}
