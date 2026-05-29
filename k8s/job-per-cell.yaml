@@ -1,0 +1,67 @@
+# Per-cell Kubernetes Job TEMPLATE — one pod (one GPU) per cell.
+#
+# This is the multi-GPU fan-out alternative to job.yaml (which runs the whole
+# sweep serially on a single GPU). __CELL__ is a placeholder substituted at
+# apply time, so a cluster operator can launch as many or as few cells as they
+# have GPUs for — without committing 11 near-identical files to the repo.
+#
+# Launch ALL 11 cells at once (one Job/pod each):
+#   for c in GRU LSTM mLSTM LRU Mamba2 FFM GatedDeltaNet SHM GTrXL RetNet LinearTransformer; do
+#     sed "s/__CELL__/$c/g" k8s/job-per-cell.yaml | kubectl apply -f -
+#   done
+#
+# Launch a single cell:
+#   sed 's/__CELL__/GRU/g' k8s/job-per-cell.yaml | kubectl apply -f -
+#
+# Watch / clean up:
+#   kubectl get jobs -l app=memrl-s13-cell
+#   kubectl delete jobs -l app=memrl-s13-cell
+#
+# Prereqs (same as job.yaml): image in a reachable registry, `wandb` secret,
+# and a ReadWriteMany PVC `memrl-runs` (RWX so all per-cell pods can share it;
+# if your storage is RWO, give each cell its own PVC or subPath).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: memrl-s13-__CELL__
+  labels: { app: memrl-s13-cell }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-s13-cell, cell: "__CELL__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: <REGISTRY>/memrl-s13:latest     # <-- set your image
+          imagePullPolicy: Always
+          # Run just this cell's 3 seeds (parallel on the one GPU).
+          command: ["bash", "experiments/s13_baseline/scripts/run___CELL__.sh"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/s13_baseline"
+            - name: SEEDS
+              value: "0 1 2"
+            - name: PARALLEL
+              value: "1"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 16Gi
+          volumeMounts:
+            - name: runs
+              mountPath: /workspace/IGAM/runs
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: memrl-runs

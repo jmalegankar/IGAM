@@ -1,0 +1,59 @@
+# Kubernetes Job for the S13 baseline sweep.
+#
+# Prereqs:
+#   - Image pushed to a registry reachable by the cluster (see Dockerfile).
+#   - A wandb API key secret:
+#       kubectl create secret generic wandb --from-literal=api-key=YOUR_KEY
+#   - A PVC named `memrl-runs` for persisted results (or swap in your storage).
+#
+# Apply:  kubectl apply -f k8s/job.yaml
+# Logs:   kubectl logs -f job/memrl-s13
+#
+# This single pod runs the whole sweep on one GPU (cells serial, seeds parallel
+# within each). To fan out one cell per pod across nodes instead, drop the
+# command override below into N copies with different run_<CELL>.sh, or template
+# it (one Job per cell). That's the better pattern on a multi-GPU cluster.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: memrl-s13
+spec:
+  backoffLimit: 0                 # don't auto-retry a crashed training run
+  template:
+    metadata:
+      labels: { app: memrl-s13 }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: <REGISTRY>/memrl-s13:latest   # <-- set your image
+          imagePullPolicy: Always
+          # Default CMD runs run_all.sh. To run a single cell, uncomment:
+          # command: ["bash", "experiments/s13_baseline/scripts/run_GRU.sh"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/s13_baseline"
+            - name: SEEDS
+              value: "0 1 2"
+            - name: PARALLEL
+              value: "1"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 16Gi
+          volumeMounts:
+            - name: runs
+              mountPath: /workspace/IGAM/runs
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: memrl-runs

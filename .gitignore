@@ -27,3 +27,6 @@ runs/
 plots/
 .claude
 .secret
+
+# Secrets — never commit a real key. Only the *.example.yaml template is tracked.
+k8s/wandb-secret.yaml
