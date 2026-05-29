@@ -3,10 +3,9 @@ n_envs: 16
 total_timesteps: 10000000
 seed: 0
 cell:
-  name: GTrXL
+  name: RetNet
   kwargs:
     n_heads: 4
-    mem_len: 128
 encoder_dim: 128
 encoder_hidden: 256
 lr: 0.0003

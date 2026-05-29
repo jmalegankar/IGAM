@@ -3,10 +3,9 @@ n_envs: 16
 total_timesteps: 10000000
 seed: 0
 cell:
-  name: LMU
+  name: LinearTransformer
   kwargs:
-    memory_size: 32
-    theta: 64.0
+    n_heads: 4
 encoder_dim: 128
 encoder_hidden: 256
 lr: 0.0003

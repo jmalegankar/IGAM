@@ -35,16 +35,18 @@ Math (per step, single block):
         c_t   = SiLU(c_t)                                  # xLSTM activation
         buf_new = win[:, :, 1:]                            # roll forward
 
-    Projections (Q, K, V per head; raw gate logits) from c_t:
-        q_t, k_t, v_t  ←  linear(c_t)                     # (B, H_heads, D)
-        i_raw, f_raw, o_raw  ←  linear(c_t)                # (B, H_heads)
+    Projections (Q, K from conv'd c_t; V from pre-conv u_t; gate logits):
+        q_t, k_t  ←  linear(c_t)                          # (B, H_heads, D)
+        v_t       ←  linear(u_t)                          # V bypasses the conv
+        i_raw, f_raw, o_raw  ←  linear([q|k|v])            # (B, H_heads)
         k_t ← k_t / √d_head                               # softmax-style temper
         o_t = σ(o_raw)                                     # standard sigmoid
 
-    Log-space stabilizer (Beck et al. 2024 Eq. 25):
-        m_t  =  max(f_raw + m_{t-1},  i_raw)               # (B, H_heads)
+    Log-space stabilizer (Beck et al. 2024 Eq. 25); forget gate is logσ(f̃):
+        log_f = logσ(f_raw)                               # σ forget gate, in log
+        m_t  =  max(log_f + m_{t-1},  i_raw)              # (B, H_heads)
         i'_t =  exp(i_raw − m_t)                                  ∈ (0, 1]
-        f'_t =  exp(f_raw + m_{t-1} − m_t)                        ∈ (0, 1]
+        f'_t =  exp(log_f + m_{t-1} − m_t)                       ∈ (0, 1]
 
     State updates:
         C_t  =  f'_t · C_{t-1}  +  i'_t · (v_t  ⊗  k_t)     # matrix memory
@@ -147,11 +149,13 @@ class mLSTM(RecurrentCell):
         # in the explicit (K-1)-long buffer state.
         self.conv_weight = nn.Parameter(torch.empty(hidden_size, self.CONV_K))
 
-        # Q, K, V projection (fused: 3·hidden_size). Per the xLSTM reference
-        # (NX-AI/xlstm), the gates take CONCAT(q, k, v) as their input — not
-        # the raw conv'd signal — so they can see the per-head queries/keys
-        # /values directly. We keep QKV fused for efficiency.
-        self.qkv_proj = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
+        # Q, K projections take the conv'd signal; V takes the PRE-conv input.
+        # This matches the official xLSTM mLSTMLayer wiring: q,k = proj(SiLU(
+        # conv(x))) while v = proj(x) bypasses the short conv. The i/f/o gates
+        # take CONCAT(q, k, v) as their input (NX-AI/xlstm), so they see the
+        # per-head queries/keys/values directly.
+        self.qk_proj = nn.Linear(hidden_size, 2 * hidden_size, bias=False)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
 
         # Gate projections take [q | k | v] (3·hidden_size) and emit per-head
         # logits (n_heads). They have biases — which the special init below
@@ -172,7 +176,8 @@ class mLSTM(RecurrentCell):
 
     def reset_parameters(self) -> None:
         nn.init.xavier_uniform_(self.input_linear.weight)
-        nn.init.xavier_uniform_(self.qkv_proj.weight)
+        nn.init.xavier_uniform_(self.qk_proj.weight)
+        nn.init.xavier_uniform_(self.v_proj.weight)
         nn.init.xavier_uniform_(self.out_linear.weight)
         # Conv kernel — small normal; depthwise-only so fan_in is K.
         nn.init.normal_(self.conv_weight, std=1.0 / math.sqrt(self.CONV_K))
@@ -242,18 +247,19 @@ class mLSTM(RecurrentCell):
         # Roll the buffer one step forward (drop oldest, append current).
         conv_buf_new = win[..., 1:]                                      # (B, H_tot, K-1)
 
-        # ── QKV from the conv'd signal; gates from CONCAT(q,k,v) ────────────
-        # Match the official xLSTM cell: q, k, v are projected first, then the
-        # gate Linears see [q|k|v] as their input (NOT the raw c).
-        proj_qkv = self.qkv_proj(c)                                       # (B, 3·hidden_size)
+        # ── Q,K from conv'd signal; V from pre-conv; gates from CONCAT(q,k,v) ─
+        # Match the official xLSTM cell: q,k = proj(SiLU(conv(u))), v = proj(u)
+        # (v bypasses the conv), then the gate Linears see [q|k|v] as input.
         H_tot = self.hidden_size
-        q_flat = proj_qkv[..., :H_tot]
-        k_flat = proj_qkv[..., H_tot : 2 * H_tot]
-        v_flat = proj_qkv[..., 2 * H_tot : 3 * H_tot]
+        qk = self.qk_proj(c)                                              # (B, 2·hidden_size)
+        q_flat = qk[..., :H_tot]
+        k_flat = qk[..., H_tot : 2 * H_tot]
+        v_flat = self.v_proj(u)                                           # (B, hidden_size)
+        gate_in = torch.cat([qk, v_flat], dim=-1)                         # (B, 3·hidden_size)
 
-        i_raw = self.igate(proj_qkv)                                      # (B, Hh)
-        f_raw = self.fgate(proj_qkv)                                      # (B, Hh)
-        o_raw = self.ogate(proj_qkv)                                      # (B, Hh)
+        i_raw = self.igate(gate_in)                                       # (B, Hh)
+        f_raw = self.fgate(gate_in)                                       # (B, Hh)
+        o_raw = self.ogate(gate_in)                                       # (B, Hh)
 
         q = q_flat.view(B, Hh, D)
         k = k_flat.view(B, Hh, D) * self._k_scale
@@ -263,10 +269,17 @@ class mLSTM(RecurrentCell):
         o = torch.sigmoid(o_raw)                                         # (B, Hh)
 
         # ── Log-space stabilizer (Beck et al. 2024 Eq. 25) ──────────────────
+        # Forget gate is logsigmoid(f_raw), NOT raw f_raw: the mLSTM forget gate
+        # is σ(f̃) (Eq. 26), so its log — which is what enters the stabilizer — is
+        # logσ(f̃). The official NX-AI/xlstm recurrent step uses
+        # `log_fg_act = logsigmoid(fgate_preact)`. Feeding the raw logit makes
+        # f' = exp(f_raw + m_{t-1} − m_t) collapse the input gate i' to ~0 within
+        # a few steps (m_t ≈ t·f_raw), freezing the memory.
+        log_f = F.logsigmoid(f_raw)                                      # (B, Hh)
         m_prev = state["m"]                                              # (B, Hh)
-        m_new = torch.maximum(f_raw + m_prev, i_raw)                     # (B, Hh)
+        m_new = torch.maximum(log_f + m_prev, i_raw)                     # (B, Hh)
         i_stab = torch.exp(i_raw - m_new)                                # (B, Hh)
-        f_stab = torch.exp(f_raw + m_prev - m_new)                       # (B, Hh)
+        f_stab = torch.exp(log_f + m_prev - m_new)                      # (B, Hh)
 
         # ── Matrix-memory and normalizer updates ────────────────────────────
         C_prev = state["C"]

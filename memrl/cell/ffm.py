@@ -118,8 +118,8 @@ class FFM(RecurrentCell):
             nn.init.xavier_uniform_(lin.weight)
         for lin in (self.in_gate, self.out_gate):
             nn.init.xavier_uniform_(lin.weight)
-            # Bias the gates slightly open at init so signal flows while the
-            # cell learns (σ(0.5) ≈ 0.62 input, output gates start mid-range).
+            # Zero bias ⇒ gates start mid-range (σ(0) = 0.5) so signal flows
+            # while the cell learns when to open/close them.
             nn.init.zeros_(lin.bias)
 
     def init_state(

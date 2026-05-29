@@ -57,16 +57,40 @@ from train import DEFAULT_CELL_KWARGS  # noqa: E402  (canonical per-cell kwargs)
 # on S13. Edit to add more from train.py's CELL_REGISTRY (e.g. S4D, DeltaNet,
 # RetNet, LinearTransformer).
 CELLS = [
-    "GRU", "LSTM", "mLSTM", "LMU", "LRU", "Mamba2", "FFM",
-    "GatedDeltaNet", "SHM", "GTrXL",
+    "GRU", "LSTM", "mLSTM", "LRU", "Mamba2", "FFM",
+    "GatedDeltaNet", "SHM", "GTrXL", "RetNet", "LinearTransformer",
 ]
 
 # Per-cell hyperparameter overrides — applied AFTER the BASE HPs.
 # Mamba-2 gets a halved learning rate per RLBenchNet (arXiv 2505.15040) and the
 # Mamba-2 codebase's recommendation; at the default 3e-4 the SSM tends to be
-# unstable in PPO. The rest of the cells use BASE['lr'].
+# unstable in PPO. The rest of the cells use BASE['lr']. Shared PPO HPs are
+# otherwise identical across cells — this is a param-matched comparison, so we
+# do NOT per-cell-tune the optimizer; only the optimizer-stability exception
+# above (Mamba-2) deviates, and it does so for a documented architecture reason.
 PER_CELL_OVERRIDES: dict[str, dict] = {
     "Mamba2": {"lr": 1.5e-4},
+}
+
+# Per-cell CELL-KWARGS overrides — merged onto train.py's DEFAULT_CELL_KWARGS for
+# THIS experiment only (the global defaults are left untouched so other configs
+# don't drift). Used to widen the memory horizon of the cells with a HARD memory
+# window so S13 can exercise their real capability:
+#   - GTrXL  mem_len 64 → 128: the attention cache is an explicit window. Under
+#     S13's random spawn, early-training traversals from cue-sighting to the
+#     decision are long and erratic; with a 64-step cache the cue can fall OUT of
+#     the window entirely, so attention never sees it and the credit signal that
+#     teaches "remember the cue" never forms. 128 gives ~5× margin over the
+#     ~13–25-step nominal recall span. Param-neutral: mem_len sizes only the
+#     rel_pos buffer + detached KV cache, NOT any trainable weight.
+# The decay/gated cells (LRU r_max=0.999 ≈ 1000-step, FFM max_timescale=1024,
+# mLSTM/Mamba2/GatedDeltaNet/SHM/RetNet) have NO hard window — their horizon
+# already far exceeds S13's recall span — so they keep their defaults.
+# LinearTransformer is intentionally left ungated/decay-free (its defining
+# property): no forgetting, so state can saturate on long episodes. That is the
+# baseline reading we want from it, not something to "fix" via overrides.
+PER_CELL_KWARGS_OVERRIDES: dict[str, dict] = {
+    "GTrXL": {"mem_len": 128},
 }
 
 # S13 reference HPs (thesis full_system.yaml, exploration-key-free).
@@ -115,7 +139,9 @@ def build_cfg(cell: str) -> dict:
         raise KeyError(f"{cell} not in train.py DEFAULT_CELL_KWARGS")
     cfg = dict(BASE)
     cfg.update(PER_CELL_OVERRIDES.get(cell, {}))      # e.g. Mamba-2 lr=1.5e-4
-    cfg["cell"] = {"name": cell, "kwargs": dict(DEFAULT_CELL_KWARGS[cell])}
+    kwargs = dict(DEFAULT_CELL_KWARGS[cell])
+    kwargs.update(PER_CELL_KWARGS_OVERRIDES.get(cell, {}))  # e.g. GTrXL mem_len, LMU theta
+    cfg["cell"] = {"name": cell, "kwargs": kwargs}
     # Order keys so the file reads cleanly: identity, then cell, then HPs.
     ordered = {
         "env_name": cfg["env_name"],

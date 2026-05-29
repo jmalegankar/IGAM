@@ -82,8 +82,10 @@ from memrl.cell.base import RecurrentCell, SideOutputs, State, apply_episode_mas
 def _legs_matrices(memory_size: int) -> tuple[Tensor, Tensor]:
     """Build HiPPO-LegS (A, B) — scale-invariant basis, no window parameter.
 
-    Unlike LegT there is no ZOH discretization: A and B are the *continuous*
-    matrices used directly in the forward-Euler step at episode step t:
+    Not used by the canonical LMU cell below (which uses LegT + ZOH); kept
+    because `dth_lmu.py` imports it for the LegS variant. A and B are the
+    *continuous* matrices used directly in a forward-Euler step at episode
+    step t:
 
         m(t) = m(t-1) + (1/t) * (-A @ m(t-1) + B * u(t-1))
 

@@ -64,11 +64,11 @@ Math (per step, single block):
         h_t  = A_d · h_{t-1} + dtB ⊗ v_c                    # (B, H, N, d_head)
         y_t  = C_c^T · h_t + D · v_c                        # (B, H, d_head)
 
-    RMSNormGated + out_proj + residual:
+    RMSNormGated (norm_before_gate=False) + out_proj + residual:
         y_flat = flatten_heads(y_t)                         # (B, d_inner)
-        y_rms  = y_flat / √(mean(y_flat²) + ε) · w_rms      # RMSNorm
-        y_z    = y_rms · SiLU(z)                            # the z-gate
-        out    = x_H_t + W_out · y_z                        # block residual
+        y_z    = y_flat · SiLU(z)                           # gate FIRST
+        y_rms  = y_z / √(mean(y_z²) + ε) · w_rms            # then RMSNorm
+        out    = x_H_t + W_out · y_rms                      # block residual
 
 Initialization (matches mamba2_simple.py reference):
   - **A**: A_init uniform in [1, 16], stored as log_A; forward A = −exp(log_A).
@@ -282,10 +282,14 @@ class Mamba2(RecurrentCell):
         y = y + self.D.view(1, H, 1) * v                                  # per-head skip
         y_flat = y.reshape(B, E)                                          # (B, d_inner)
 
-        # ── RMSNormGated: RMS-normalize y, gain · SiLU(z) gate ─────────────
-        rms = torch.rsqrt(y_flat.pow(2).mean(dim=-1, keepdim=True) + self.rms_eps)
-        y_rms = y_flat * rms * self.rms_weight                            # (B, d_inner)
-        y_gated = y_rms * F.silu(z)                                       # (B, d_inner)
+        # ── RMSNormGated (norm_before_gate=False): gate FIRST, then RMS-norm ─
+        # The official Mamba-2 builds RMSNormGated(..., norm_before_gate=False),
+        # whose semantics are y = rmsnorm(y · SiLU(z)) · w — the gate enters the
+        # RMS statistic. Normalizing first then gating (norm_before_gate=True) is
+        # a different, non-default variant.
+        y_pre = y_flat * F.silu(z)                                        # (B, d_inner)
+        rms = torch.rsqrt(y_pre.pow(2).mean(dim=-1, keepdim=True) + self.rms_eps)
+        y_gated = y_pre * rms * self.rms_weight                           # (B, d_inner)
 
         # ── Out-proj + block residual ──────────────────────────────────────
         y_out = self.out_proj(y_gated)                                    # (B, d_model)
