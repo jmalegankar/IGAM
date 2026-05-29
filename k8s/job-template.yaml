@@ -1,0 +1,61 @@
+# Generic per-script Job TEMPLATE — one pod (one GPU) per training script.
+#
+# __JOBNAME__ and __SCRIPT__ are placeholders substituted by k8s/launch-jobs.sh,
+# which fans this out into one Job per leaf script under
+# experiments/s13_baseline/scripts/ (the 11 memory-baseline run_<cell>.sh + the
+# 6 exploration explore_<cell>_<method>.sh), skipping the aggregators run_all.sh
+# and run_exploration.sh.
+#
+# The scripts are baked into the image (the Dockerfile clones the repo to
+# /workspace/IGAM, which is also WORKDIR), so __SCRIPT__ is a repo-relative path.
+#
+# Prereqs in the cluster (same as job.yaml):
+#   * image r0hanpat1l/memory:latest reachable
+#   * Secret `wandb` with key `api-key`  (see k8s/wandb-secret.example.yaml)
+#   * ReadWriteMany PVC `memrl-runs`     (RWX so all per-job pods share it; if
+#     your storage is RWO, give each job its own PVC or use a subPath)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-s13 }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-s13, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          # Run this script's seeds (parallel on the one GPU; PARALLEL=1).
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/s13_baseline"
+            - name: SEEDS
+              value: "0 1 2"
+            - name: PARALLEL
+              value: "1"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 16Gi
+          volumeMounts:
+            - name: runs
+              mountPath: /workspace/IGAM/runs
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: memrl-runs
