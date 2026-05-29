@@ -20,6 +20,7 @@ from .lmu import LMU
 from .lru import LRU
 from .lstm import LSTM
 from .mamba2 import Mamba2
+from .memoryless import Memoryless
 from .mlstm import mLSTM
 from .retnet import RetNet
 from .s4d import S4D
@@ -47,6 +48,7 @@ __all__ = [
     "LSTM",
     "LinearTransformer",
     "Mamba2",
+    "Memoryless",
     "RetNet",
     "S4D",
     "SHM",

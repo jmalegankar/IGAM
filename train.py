@@ -85,6 +85,7 @@ from memrl.cell import (
     GatedLMU,
     LinearTransformer,
     Mamba2,
+    Memoryless,
     MultiLayerGatedDeltaNet,
     RecurrentCell,
     RetNet,
@@ -109,6 +110,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
     "GRU": GRU,
     "LSTM": LSTM,
     "LMU": LMU,
+    "Memoryless": Memoryless,
     "LinearTransformer": LinearTransformer,
     "S4D": S4D,
     "Mamba2": Mamba2,
@@ -132,6 +134,7 @@ CELL_REGISTRY: dict[str, type[RecurrentCell]] = {
 DEFAULT_CELL_KWARGS: dict[str, dict[str, Any]] = {
     "GRU":               {},
     "LSTM":              {},
+    "Memoryless":        {},   # stateless feedforward control ("no cell" arm)
     "LMU":               {"memory_size": 32, "theta": 64.0},
     "LinearTransformer": {"n_heads": 4},
     "S4D":               {"d_state": 64},

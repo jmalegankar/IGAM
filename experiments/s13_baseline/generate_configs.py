@@ -1,16 +1,23 @@
-"""Generate the MiniGrid-MemoryS13 *memory-only* baseline (configs + run scripts).
+"""Generate the MiniGrid-MemoryS13 baseline study (configs + run scripts).
 
-One YAML per cell + one launch script per cell. This is the "all cells + PPO"
-baseline — the x-axis of the memory × exploration study: how far does each
-cell get on S13 from memory alone, with NO exploration bonus. The exploration
-columns (rnd / e3b_rand / noveld / icm / e3b_obs) are a separate follow-up.
+Two axes of the memory × exploration study:
+
+  1. MEMORY-ONLY baseline (x-axis): 11 cells × intrinsic=none × 3 seeds = 33
+     runs. How far does each cell get on S13 from memory alone, NO exploration.
+
+  2. EXPLORATION arm (y-axis): {GRU, Memoryless} × {rnd, noveld, e3b_rand} × 3
+     seeds = 18 runs. Does an intrinsic bonus help on this exploration-
+     bottlenecked task? GRU = does exploration help a policy that CAN remember;
+     Memoryless = negative control (no memory ⇒ can't solve S13 regardless).
 
 Emits, under experiments/s13_baseline/:
-  configs/s13_<cell>_none_<N>M.yaml   one per cell (seed set at launch)
-  scripts/run_<cell>.sh               one per cell — runs its 3 seeds AT ONCE
-                                       (in parallel); honors PYTHON/DEVICE/SEEDS
-  scripts/run_all.sh                  runs every per-cell script (cells serial,
-                                       seeds parallel within each)
+  configs/s13_<cell>_none_<N>M.yaml        memory baseline, one per cell
+  configs/s13_<cell>_<method>_<N>M.yaml    exploration arm, one per condition
+  scripts/run_<cell>.sh                    memory baseline: a cell's 3 seeds AT
+                                           ONCE (parallel); honors PYTHON/DEVICE/SEEDS
+  scripts/run_all.sh                       runs every memory-baseline script
+  scripts/explore_<cell>_<method>.sh       exploration arm: a condition's 3 seeds
+  scripts/run_exploration.sh               runs every exploration-arm script
 
 Design choices (and why):
   - HPs follow the thesis S13 reference (gex full_system.yaml), reviewed for this
@@ -60,6 +67,42 @@ CELLS = [
     "GRU", "LSTM", "mLSTM", "LRU", "Mamba2", "FFM",
     "GatedDeltaNet", "SHM", "GTrXL", "RetNet", "LinearTransformer",
 ]
+
+# ── Exploration arm ─────────────────────────────────────────────────────────
+# The SECOND axis of the study: does an intrinsic-reward exploration bonus help
+# on S13 (which is exploration-bottlenecked)? We cross two backbones with three
+# bonuses, 3 seeds each = 18 runs, on top of the 11-cell memory-only baseline.
+#
+#   Backbones (EXPLORATION_CELLS):
+#     - GRU        : a competent memory cell. Tests whether exploration helps a
+#                    policy that CAN remember overcome the exploration bottleneck
+#                    (the real performance comparison).
+#     - Memoryless : the stateless feedforward control. S13 REQUIRES recalling
+#                    the start cue at the junction, which a memoryless policy
+#                    structurally cannot do — so this is a NEGATIVE CONTROL that
+#                    shows exploration alone (no memory) is insufficient.
+#
+#   Bonuses (EXPLORATION_METHODS) — verified against their papers (2026-05-29):
+#     - rnd      : lifelong novelty = ‖predictor(x) − frozen_target(x)‖²
+#                  (Burda et al. ICLR 2019).
+#     - noveld   : hybrid = max(rnd(sₜ) − α·rnd(sₜ₋₁), 0) gated by first-visit
+#                  (Zhang et al. NeurIPS 2021; α=0.5 default).
+#     - e3b_rand : episodic elliptical/Mahalanobis bonus φᵀΛ⁻¹φ over a FROZEN
+#                  random φ — cell-agnostic, runs identically on any backbone
+#                  (Henaff et al. NeurIPS 2022; random-φ per the thesis finding).
+EXPLORATION_CELLS = ["GRU", "Memoryless"]
+EXPLORATION_METHODS = ["rnd", "noveld", "e3b_rand"]
+
+# Intrinsic-reward weight for the exploration arm. train.py adds the bonus in a
+# SINGLE reward stream: reward ← reward + λ · bonus (ppo.py:294). All three
+# bonuses are running-std-normalized to ≈O(1) per step, and S13's extrinsic
+# reward is a single sparse terminal ≈1.0, so with γ=0.999 over ~400–800-step
+# episodes the discounted intrinsic return dominates the extrinsic for any
+# λ ≳ 0.003. λ=0.01 keeps exploration as a strong-but-not-overwhelming early
+# driver. NOTE: std-normalization means the normalized bonus does NOT auto-
+# anneal to zero as novelty is learned — this λ is the primary knob to retune
+# if the agent over-explores (lower it) or never explores (raise it).
+LAMBDA_INTRINSIC = 0.01
 
 # Per-cell hyperparameter overrides — applied AFTER the BASE HPs.
 # Mamba-2 gets a halved learning rate per RLBenchNet (arXiv 2505.15040) and the
@@ -134,7 +177,8 @@ BASE = {
 }
 
 
-def build_cfg(cell: str) -> dict:
+def build_cfg(cell: str, intrinsic: str = "none",
+              lambda_intrinsic: float = 0.0) -> dict:
     if cell not in DEFAULT_CELL_KWARGS:
         raise KeyError(f"{cell} not in train.py DEFAULT_CELL_KWARGS")
     cfg = dict(BASE)
@@ -142,6 +186,7 @@ def build_cfg(cell: str) -> dict:
     kwargs = dict(DEFAULT_CELL_KWARGS[cell])
     kwargs.update(PER_CELL_KWARGS_OVERRIDES.get(cell, {}))  # e.g. GTrXL mem_len, LMU theta
     cfg["cell"] = {"name": cell, "kwargs": kwargs}
+    cfg["intrinsic"] = intrinsic
     # Order keys so the file reads cleanly: identity, then cell, then HPs.
     ordered = {
         "env_name": cfg["env_name"],
@@ -154,9 +199,15 @@ def build_cfg(cell: str) -> dict:
     }
     for k in ("lr", "n_steps", "n_epochs", "gamma", "gae_lambda", "clip_range",
               "ent_coef", "vf_coef", "max_grad_norm", "target_kl",
-              "chunk_len", "n_chunks_per_batch", "intrinsic",
-              "eval_every_rollouts", "n_eval_episodes",
-              "wandb", "wandb_project"):
+              "chunk_len", "n_chunks_per_batch", "intrinsic"):
+        ordered[k] = cfg[k]
+    # Intrinsic-reward weight: ONLY meaningful (and only written) for the
+    # exploration arm. train.py defaults lambda_intrinsic=0.0, so an absent key
+    # == bonus has zero weight == pure memory-only baseline. Writing it for the
+    # "none" configs would be a silent no-op, so we omit it there.
+    if intrinsic != "none" and lambda_intrinsic > 0:
+        ordered["lambda_intrinsic"] = lambda_intrinsic
+    for k in ("eval_every_rollouts", "n_eval_episodes", "wandb", "wandb_project"):
         ordered[k] = cfg[k]
     return ordered
 
@@ -216,16 +267,82 @@ echo "[__CELL__] all seeds done."
 
 _RUN_ALL_TEMPLATE = """\
 #!/usr/bin/env bash
-# AUTO-GENERATED. Run every per-cell script: cells serial, seeds parallel within.
-# All env knobs (PYTHON/DEVICE/RUNS_DIR/SEEDS/PARALLEL) propagate to each script.
+# AUTO-GENERATED. Run every per-cell MEMORY-BASELINE script (intrinsic=none):
+# cells serial, seeds parallel within. Does NOT run the exploration arm — use
+# run_exploration.sh for that. All env knobs (PYTHON/DEVICE/RUNS_DIR/SEEDS/
+# PARALLEL) propagate to each script.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for s in "$HERE"/run_*.sh; do
-  [[ "$(basename "$s")" == "run_all.sh" ]] && continue
-  echo "=== $(basename "$s") ==="
+  bn="$(basename "$s")"
+  # Skip the aggregators themselves (run_*.sh also matches run_exploration.sh).
+  [[ "$bn" == "run_all.sh" || "$bn" == "run_exploration.sh" ]] && continue
+  echo "=== $bn ==="
   bash "$s"
 done
 echo "All cells done."
+"""
+
+# Exploration-arm per-condition launcher. Mirrors _SCRIPT_TEMPLATE but the
+# config path carries the intrinsic method and the file is named
+# explore_<cell>_<method>.sh so run_all.sh's run_*.sh glob never picks it up.
+_EXPLORE_SCRIPT_TEMPLATE = """\
+#!/usr/bin/env bash
+# AUTO-GENERATED by generate_configs.py — regenerate, don't hand-edit.
+# Exploration arm: __CELL__ + __INTRINSIC__ on MiniGrid-MemoryS13, all seeds
+# AT ONCE (parallel). Same env-var knobs as the memory-baseline run_*.sh.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+cd "$REPO_ROOT"
+
+if [[ -z "${PYTHON:-}" ]]; then
+  if [[ -x ".venv/bin/python" ]]; then PYTHON=".venv/bin/python"; else PYTHON="python"; fi
+fi
+DEVICE="${DEVICE:-cuda}"
+RUNS_DIR="${RUNS_DIR:-runs/s13_baseline}"
+SEEDS="${SEEDS:-0 1 2}"
+PARALLEL="${PARALLEL:-1}"
+EXTRA="${EXTRA:-}"
+CFG="$HERE/../configs/s13___CELL_____INTRINSIC_____SUFFIX__.yaml"
+LOGDIR="$HERE/../_logs"; mkdir -p "$LOGDIR"
+TAG="__CELL_____INTRINSIC__"
+
+echo "[$TAG] python=$PYTHON device=$DEVICE seeds=[$SEEDS] parallel=$PARALLEL"
+pids=()
+for s in $SEEDS; do
+  if [[ "$PARALLEL" == "1" ]]; then
+    "$PYTHON" -m train --config "$CFG" --seed "$s" \\
+        --runs-dir "$RUNS_DIR" --device "$DEVICE" $EXTRA \\
+        > "$LOGDIR/${TAG}_seed${s}.log" 2>&1 &
+    pids+=("$!")
+    echo "  launched $TAG seed=$s (pid $!) → $LOGDIR/${TAG}_seed${s}.log"
+  else
+    echo "  $TAG seed=$s (sequential)"
+    "$PYTHON" -m train --config "$CFG" --seed "$s" \\
+        --runs-dir "$RUNS_DIR" --device "$DEVICE" $EXTRA
+  fi
+done
+if [[ "$PARALLEL" == "1" ]]; then
+  fail=0
+  for p in "${pids[@]}"; do wait "$p" || fail=1; done
+  [[ "$fail" == "0" ]] || { echo "[$TAG] a seed FAILED — see $LOGDIR"; exit 1; }
+fi
+echo "[$TAG] all seeds done."
+"""
+
+_RUN_EXPLORATION_TEMPLATE = """\
+#!/usr/bin/env bash
+# AUTO-GENERATED. Run every exploration-arm script (explore_*.sh): conditions
+# serial, seeds parallel within. All env knobs propagate to each script.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for s in "$HERE"/explore_*.sh; do
+  echo "=== $(basename "$s") ==="
+  bash "$s"
+done
+echo "All exploration conditions done."
 """
 
 
@@ -246,11 +363,34 @@ def write_scripts(cells: list[str], suffix: str) -> list[Path]:
     return written
 
 
+def write_explore_scripts(conditions: list[tuple[str, str]], suffix: str) -> list[Path]:
+    """One explore_<cell>_<method>.sh per exploration condition + run_exploration.sh."""
+    scripts_dir = HERE / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for cell, method in conditions:
+        body = (_EXPLORE_SCRIPT_TEMPLATE
+                .replace("__CELL__", cell)
+                .replace("__INTRINSIC__", method)
+                .replace("__SUFFIX__", suffix))
+        path = scripts_dir / f"explore_{cell}_{method}.sh"
+        path.write_text(body)
+        os.chmod(path, 0o755)
+        written.append(path)
+    run_expl = scripts_dir / "run_exploration.sh"
+    run_expl.write_text(_RUN_EXPLORATION_TEMPLATE)
+    os.chmod(run_expl, 0o755)
+    written.append(run_expl)
+    return written
+
+
 def main() -> None:
     suffix = f"{BASE['total_timesteps'] // 1_000_000}M"
 
     out_dir = HERE / "configs"
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Memory-only baseline: 11 cells × intrinsic=none ─────────────────────
     cfgs = []
     for cell in CELLS:
         cfg = build_cfg(cell)
@@ -258,14 +398,34 @@ def main() -> None:
         with open(path, "w") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
         cfgs.append(path)
-
     scripts = write_scripts(CELLS, suffix)
 
-    print(f"Wrote {len(cfgs)} configs → {out_dir} (suffix {suffix}):")
+    # ── Exploration arm: {GRU, Memoryless} × {rnd, noveld, e3b_rand} ────────
+    explore_conditions = [
+        (cell, method)
+        for cell in EXPLORATION_CELLS
+        for method in EXPLORATION_METHODS
+    ]
+    expl_cfgs = []
+    for cell, method in explore_conditions:
+        cfg = build_cfg(cell, intrinsic=method, lambda_intrinsic=LAMBDA_INTRINSIC)
+        path = out_dir / f"s13_{cell}_{method}_{suffix}.yaml"
+        with open(path, "w") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+        expl_cfgs.append(path)
+    expl_scripts = write_explore_scripts(explore_conditions, suffix)
+
+    print(f"Wrote {len(cfgs)} memory-baseline configs → {out_dir} (suffix {suffix}):")
     for p in cfgs:
         print(f"  {p.name}")
-    print(f"\nWrote {len(scripts)} scripts → {HERE / 'scripts'}:")
+    print(f"\nWrote {len(expl_cfgs)} exploration-arm configs:")
+    for p in expl_cfgs:
+        print(f"  {p.name}")
+    print(f"\nWrote {len(scripts)} memory-baseline scripts → {HERE / 'scripts'}:")
     for p in scripts:
+        print(f"  {p.name}")
+    print(f"\nWrote {len(expl_scripts)} exploration-arm scripts:")
+    for p in expl_scripts:
         print(f"  {p.name}")
 
 

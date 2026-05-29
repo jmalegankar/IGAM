@@ -268,9 +268,12 @@ class MemPPO(PPO):
                     innov_per_env_buf.append(None)  # placeholder for indexing
                 if state_keys is None:
                     state_keys = tuple(new_state.keys())
-                state_norm_rows_t.append(th.stack([
-                    new_state[k].norm() for k in state_keys
-                ]))                                                       # (K,) GPU
+                # Memoryless cells have an empty state dict; th.stack([]) would
+                # raise, and there is no state-norm to log, so skip entirely.
+                if state_keys:
+                    state_norm_rows_t.append(th.stack([
+                        new_state[k].norm() for k in state_keys
+                    ]))                                                   # (K,) GPU
 
             actions_np = actions.cpu().numpy()
             new_obs, rewards, dones, infos = env.step(actions_np)
