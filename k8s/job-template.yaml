@@ -41,17 +41,38 @@ spec:
               value: "0 1 2"
             - name: PARALLEL
               value: "1"
+            # ── Thread caps ─────────────────────────────────────────────────
+            # Threads PER SEED. With PARALLEL=1 + SEEDS="0 1 2", 3 seed processes
+            # run at once in this pod, so total threads = 4 × 3 = 12, which is
+            # what the CPU request/limit below is sized to. MEMRL_TORCH_THREADS
+            # caps torch; OMP/MKL/OPENBLAS cap NumPy/BLAS (env stepping + the
+            # intrinsic nets) — without those, BLAS grabs all node cores and
+            # blows past the CPU limit. Keep all four equal.
+            - name: MEMRL_TORCH_THREADS
+              value: "4"
+            - name: OMP_NUM_THREADS
+              value: "4"
+            - name: MKL_NUM_THREADS
+              value: "4"
+            - name: OPENBLAS_NUM_THREADS
+              value: "4"
             - name: WANDB_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: wandb
                   key: api-key
+          # CPU sized to (threads/seed × seeds) = 4 × 3 = 12; limit adds headroom
+          # for the Python/CUDA driver overhead so the 12 worker threads aren't
+          # CFS-throttled. If you change MEMRL_TORCH_THREADS or SEEDS, re-derive:
+          #   cpu = MEMRL_TORCH_THREADS × (number of parallel seeds).
           resources:
-            limits:
-              nvidia.com/gpu: 1
             requests:
-              cpu: "4"
+              cpu: "12"
               memory: 16Gi
+            limits:
+              cpu: "16"
+              memory: 24Gi
+              nvidia.com/gpu: 1
           volumeMounts:
             - name: runs
               mountPath: /workspace/IGAM/runs

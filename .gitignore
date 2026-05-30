@@ -30,3 +30,5 @@ plots/
 
 # Secrets — never commit a real key. Only the *.example.yaml template is tracked.
 k8s/wandb-secret.yaml
+# Test Job with the wandb key pasted inline (see k8s/job-gru-test.yaml header).
+k8s/job-gru-test.yaml

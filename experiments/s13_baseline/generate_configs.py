@@ -93,6 +93,18 @@ CELLS = [
 EXPLORATION_CELLS = ["GRU", "Memoryless"]
 EXPLORATION_METHODS = ["rnd", "noveld", "e3b_rand"]
 
+# Phase 2 — winning-bonus sweep across ALL cells. The selection arm above
+# (GRU+Memoryless × 3 bonuses, 10M × 3 seeds) picked NovelD: it tied RND at 2/3
+# seeds on GRU and STRICTLY DOMINATES it by construction (NovelD = the RND
+# lifelong term gated by episodic first-visit, so anything RND rescues NovelD
+# also rescues), and both beat E3B-rand (1/3). We now apply NovelD to every cell
+# to complete the 11 × {none, NovelD} factorial — this is what disentangles an
+# EXPLORATION failure (cell floors at ~0.5 with none but clears with NovelD) from
+# a MEMORY-CAPACITY failure (floors even with NovelD). GRU+NovelD and
+# Memoryless+NovelD already exist from the selection arm and are deduped, so this
+# adds the other 9 cells = 9 new conditions (27 runs at 3 seeds).
+BEST_METHOD = "noveld"
+
 # Intrinsic-reward weight for the exploration arm. train.py adds the bonus in a
 # SINGLE reward stream: reward ← reward + λ · bonus (ppo.py:294). All three
 # bonuses are running-std-normalized to ≈O(1) per step, and S13's extrinsic
@@ -400,12 +412,22 @@ def main() -> None:
         cfgs.append(path)
     scripts = write_scripts(CELLS, suffix)
 
-    # ── Exploration arm: {GRU, Memoryless} × {rnd, noveld, e3b_rand} ────────
-    explore_conditions = [
+    # ── Exploration arm ─────────────────────────────────────────────────────
+    # (1) selection arm: {GRU, Memoryless} × {rnd, noveld, e3b_rand}
+    # (2) phase-2 winner sweep: all 11 cells × {noveld}
+    # Union, order-preserving, deduped (GRU/Memoryless + noveld appear in both).
+    selection_conditions = [
         (cell, method)
         for cell in EXPLORATION_CELLS
         for method in EXPLORATION_METHODS
     ]
+    winner_conditions = [(cell, BEST_METHOD) for cell in CELLS]
+    explore_conditions = []
+    _seen: set[tuple[str, str]] = set()
+    for cond in selection_conditions + winner_conditions:
+        if cond not in _seen:
+            _seen.add(cond)
+            explore_conditions.append(cond)
     expl_cfgs = []
     for cell, method in explore_conditions:
         cfg = build_cfg(cell, intrinsic=method, lambda_intrinsic=LAMBDA_INTRINSIC)
