@@ -15,8 +15,14 @@
 #   * ReadWriteMany PVC `memrl-runs`
 #
 # Usage:
-#   k8s/launch-jobs.sh               # apply all 17 Jobs
+#   k8s/launch-jobs.sh               # apply ALL leaf Jobs
 #   DRY_RUN=1 k8s/launch-jobs.sh     # print the manifests, apply nothing
+#   ONLY='<ERE>' k8s/launch-jobs.sh  # apply only scripts whose basename matches
+#                                    # the extended regex ONLY. e.g. launch just
+#                                    # the phase-2 NovelD sweep on the cells that
+#                                    # haven't run yet (GRU/Memoryless already did):
+#   ONLY='explore_(LSTM|mLSTM|LRU|Mamba2|FFM|GatedDeltaNet|SHM|GTrXL|RetNet|LinearTransformer)_noveld' \
+#       k8s/launch-jobs.sh
 #
 # Watch / clean up:
 #   kubectl get jobs -l app=memrl-s13
@@ -40,6 +46,13 @@ for f in "$SCRIPTS_DIR"/run_*.sh "$SCRIPTS_DIR"/explore_*.sh; do
   case "$bn" in
     run_all.sh | run_exploration.sh) continue ;;
   esac
+
+  # Optional subset filter: ONLY is an extended regex matched against the
+  # basename. Lets you launch a slice (e.g. just the new NovelD cells) without
+  # re-applying Jobs that already ran. Unset ONLY ⇒ launch everything.
+  if [[ -n "${ONLY:-}" && ! "$bn" =~ ${ONLY} ]]; then
+    continue
+  fi
 
   base="${bn%.sh}"            # run_GRU            | explore_GRU_rnd
   stem="${base#run_}"         # GRU                | explore_GRU_rnd
