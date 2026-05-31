@@ -1,0 +1,55 @@
+# Per-script Job TEMPLATE for the Active T-Maze sweep.
+#
+# Deliberately SEPARATE from k8s/job-template.yaml (the S13 baseline template) so
+# the two experiments never interfere. Substituted by k8s/launch-maze-jobs.sh,
+# which fans one Job per leaf script under experiments/tmaze_active/scripts/.
+# Only __JOBNAME__ and __SCRIPT__ are placeholders; everything else is baked for
+# the T-Maze run.
+#
+# CPU-ONLY on purpose: T-Maze obs is Box(3,) ⇒ a tiny MLP. A GPU would sit idle,
+# so these request CPU only and free the cluster GPUs for the S13 / image runs.
+#
+# Prereqs in the cluster:
+#   * image r0hanpat1l/memory:latest reachable
+#   * Secret `wandb` with key `api-key`  (see k8s/wandb-secret.example.yaml)
+# (No PVC — wandb is the system of record; each corridor length L logs to its own
+#  project memrl-tmaze-active-L<L>.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-tmaze }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-tmaze, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          # Run this script's 3 seeds in parallel (PARALLEL=1) on CPU.
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cpu"
+            - name: RUNS_DIR
+              value: "runs/tmaze_active"
+            - name: SEEDS
+              value: "0 1 2"
+            - name: PARALLEL
+              value: "1"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          resources:
+            requests:
+              cpu: "3"
+              memory: 6Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
