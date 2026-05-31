@@ -127,6 +127,58 @@ class ObsPhi(PhiSource):
 # eps_mem signal (which is essentially the same thing).
 # ──────────────────────────────────────────────────────────────────────────
 
+class IDMPhi(PhiSource):
+    """Trainable φ encoder, learned via an inverse-dynamics objective.
+
+    This is φ from the ORIGINAL E3B (Henaff et al. NeurIPS 2022): φ is NOT
+    frozen — it is trained to predict the action aₜ from (φ(sₜ), φ(sₜ₊₁)), which
+    forces φ to encode *controllable* state and discard uncontrollable noise.
+    The owning E3B module (`E3BIDM`) holds the inverse-dynamics head + optimizer
+    and trains `net` in its `update()`; this class just exposes the two paths:
+
+      * `encode()`  — @no_grad, used by E3B.compute() for the bonus.
+      * `forward()` — grad-enabled, used by the IDM training loop.
+
+    Architecture mirrors RandomPhi (same MLP shape) so e3b_rand vs e3b_idm
+    differ ONLY in frozen-random vs IDM-learned φ — a clean ablation.
+    """
+
+    def __init__(
+        self,
+        obs_dim: int,
+        hidden: int = 128,
+        feature_dim: int = 64,
+        device: torch.device | str = "cpu",
+    ) -> None:
+        super().__init__()
+        self._dim = feature_dim
+        self.device = torch.device(device)
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden), nn.ReLU(),
+            nn.Linear(hidden, hidden), nn.ReLU(),
+            nn.Linear(hidden, feature_dim),
+        ).to(self.device)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=np.sqrt(2))
+                nn.init.zeros_(m.bias)
+        # NOT frozen — params keep requires_grad=True; E3BIDM trains them.
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
+    @torch.no_grad()
+    def encode(self, obs, side, cell_state) -> Tensor:
+        """Bonus path: detached features for the elliptical estimator."""
+        x = _obs_to_tensor(obs, self.device)
+        return self.net(x)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Training path: grad-enabled features. `x` is a (B, obs_dim) tensor."""
+        return self.net(x)
+
+
 class CellInnovationPhi(PhiSource):
     """Use the cell's eps_mem (or named innovation key) as a scalar feature.
 
