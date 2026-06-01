@@ -1,11 +1,16 @@
 """Generate the MiniGrid-RedBlueDoors-8x8 study (memory ranking + a memoryless
 exploration control).
 
-RedBlueDoors-8x8: two doors (red, blue) in an 8x8 room. The agent must open them
-in order, which requires REMEMBERING which door it already opened (the order is
-the hidden state). Modest exploration (small room), so this leans MEMORY — a good
-companion to S13 / ObstructedMaze for a second memory-cell ranking on a different
-mechanic (order-recall rather than cue-recall or spatial-search).
+RedBlueDoors (16x8 room): open the red door, then the blue door. At MiniGrid's
+default 7x7 view this is — per the official docstring — "solvable WITHOUT memory"
+(door STATE is observable and the order is executable as a reactive spatial
+routine). To make it a genuine memory test we shrink the egocentric view to 3x3
+(via ViewSizeWrapper, env_kwargs.agent_view_size=AGENT_VIEW_SIZE). The smaller
+view aliases most positions, so the agent can no longer localize/route reactively
+and must integrate history — RLBenchNet's exact trick for raising MiniGrid's
+memory demand. This makes it a second memory-cell ranking on a different mechanic
+(order-recall + positional integration) vs S13's cue-recall / ObstructedMaze's
+spatial search. Set AGENT_VIEW_SIZE=None to recover the (non-memory) 7x7 task.
 
 Two arms:
   1. MEMORY RANKING — cells x intrinsic=none (plain PPO). Which cells can remember
@@ -39,6 +44,16 @@ sys.path.insert(0, str(REPO_ROOT))
 from train import DEFAULT_CELL_KWARGS  # noqa: E402
 
 ENV_NAME = "MiniGrid-RedBlueDoors-8x8-v0"
+# Shrink the egocentric view to force memory (RLBenchNet). None ⇒ default 7x7
+# (which is solvable WITHOUT memory — not a memory test). 3 ⇒ obs (3,3,20).
+AGENT_VIEW_SIZE = 3
+
+# Separate wandb project per view size so the 3x3 (memory) runs don't mix with
+# the 7x7 (non-memory) ones on the same dashboard.
+WANDB_PROJECT = (
+    f"memrl-{AGENT_VIEW_SIZE}x{AGENT_VIEW_SIZE}-redbluedoors-8x8"
+    if AGENT_VIEW_SIZE is not None else "memrl-redbluedoors-8x8"
+)
 
 # Memory ranking: the 11-cell lineup (same as S13), intrinsic=none.
 CELLS = [
@@ -75,7 +90,7 @@ BASE = {
     "eval_every_rollouts": 5,
     "n_eval_episodes": 20,
     "wandb": True,
-    "wandb_project": "memrl-redbluedoors-8x8",
+    "wandb_project": WANDB_PROJECT,
 }
 
 
@@ -87,6 +102,8 @@ def build_cfg(cell: str, intrinsic: str) -> dict:
     ordered = {
         "env_name": BASE["env_name"],
         "n_envs": BASE["n_envs"],
+        **({"env_kwargs": {"agent_view_size": AGENT_VIEW_SIZE}}
+           if AGENT_VIEW_SIZE is not None else {}),
         "total_timesteps": BASE["total_timesteps"],
         "seed": 0,                      # overridden per run via --seed
         "cell": {"name": cell, "kwargs": kwargs},

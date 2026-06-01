@@ -74,6 +74,7 @@ class MemPPO(PPO):
         shared_backbones: bool = False,
         chunk_len: int = 16,
         n_chunks_per_batch: int = 16,
+        skip_nonfinite_grad: bool = True,
         tensorboard_log: Optional[str] = None,
         verbose: int = 1,
         seed: Optional[int] = None,
@@ -86,6 +87,12 @@ class MemPPO(PPO):
         self.shared_backbones = shared_backbones
         self.chunk_len = chunk_len
         self.n_chunks_per_batch = n_chunks_per_batch
+        # When True (default), drop any minibatch whose gradient is non-finite
+        # instead of stepping (which would NaN every weight). No-op on the
+        # finite-gradient path, so well-conditioned tasks (e.g. MiniGrid/S13)
+        # are bit-for-bit unaffected. Set False to restore the original behavior
+        # (step regardless ⇒ crash on the first inf/nan grad).
+        self.skip_nonfinite_grad = bool(skip_nonfinite_grad)
 
         # Intrinsic reward — uniform interface via the IntrinsicRewardModule
         # abstraction (see memrl/exploration/). When module is provided AND
@@ -504,6 +511,7 @@ class MemPPO(PPO):
         approx_kl_divs: list[float] = []
         grad_norms:     list[float] = []
         comp_grad_norms: dict[str, list[float]] = defaultdict(list)
+        n_skipped_updates = 0
 
         continue_training = True
         for epoch in range(self.n_epochs):
@@ -566,6 +574,7 @@ class MemPPO(PPO):
                 # log them separately so we can see if the critic's
                 # cell drifts differently from the actor's.
                 per_comp_max = 0.0
+                nonfinite = False
                 for name, mod in [
                     ("encoder_actor",  self.policy.encoder_actor),
                     ("encoder_critic", self.policy.encoder_critic),
@@ -579,7 +588,19 @@ class MemPPO(PPO):
                     ).item()
                     comp_grad_norms[name].append(norm)
                     per_comp_max = max(per_comp_max, norm)
+                    if not np.isfinite(norm):
+                        nonfinite = True
                 grad_norms.append(per_comp_max)
+
+                # Non-finite gradient (typically an inf from a long-BPTT product
+                # overflowing float32 — clip_grad_norm_'s inf*0 then NaNs the
+                # grads). Stepping would propagate NaN into every weight, killing
+                # the whole run. Instead DROP this minibatch: zero the (already
+                # corrupted) grads and skip the step, keeping params finite.
+                if nonfinite and self.skip_nonfinite_grad:
+                    self.policy.optimizer.zero_grad(set_to_none=True)
+                    n_skipped_updates += 1
+                    continue
 
                 self.policy.optimizer.step()
 
@@ -605,6 +626,7 @@ class MemPPO(PPO):
         self.logger.record("train/approx_kl",          float(np.mean(approx_kl_divs)))
         self.logger.record("train/clip_fraction",      float(np.mean(clip_fractions)))
         self.logger.record("train/grad_norm",          float(np.mean(grad_norms)))
+        self.logger.record("train/n_skipped_updates",  n_skipped_updates)
         self.logger.record("train/explained_variance", float(explained_var))
         self.logger.record(
             "train/n_updates", self._n_updates, exclude="tensorboard",

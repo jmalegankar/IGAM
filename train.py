@@ -461,6 +461,7 @@ def main() -> int:
         env_name=cfg["env_name"],
         n_envs=cfg["n_envs"],
         seed=cfg["seed"],
+        **cfg.get("env_kwargs", {}),   # per-env extras (e.g. TMaze lag_penalty)
     )
 
     factory = make_cell_factory(
@@ -499,6 +500,7 @@ def main() -> int:
         shared_backbones=cfg.get("shared_backbones", False),   # default = Option A
         chunk_len=cfg["chunk_len"],
         n_chunks_per_batch=cfg["n_chunks_per_batch"],
+        skip_nonfinite_grad=cfg.get("skip_nonfinite_grad", True),
         tensorboard_log=str(run_dir),
         verbose=1,
         seed=cfg["seed"],
@@ -520,6 +522,7 @@ def main() -> int:
         env_name=cfg["env_name"],
         n_envs=1,
         seed=cfg["seed"] + 10_000,
+        **cfg.get("env_kwargs", {}),   # same env config as training (lag_penalty…)
     )
     eval_freq = cfg["n_steps"] * cfg.get("eval_every_rollouts", 1)
     eval_cb = EvalCallback(

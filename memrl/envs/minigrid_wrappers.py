@@ -41,9 +41,11 @@ Recommended task IDs:
 
 from __future__ import annotations
 
+from typing import Optional
+
 import gymnasium as gym
 import numpy as np
-from minigrid.wrappers import ImgObsWrapper, OneHotPartialObsWrapper
+from minigrid.wrappers import ImgObsWrapper, OneHotPartialObsWrapper, ViewSizeWrapper
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv
 
@@ -78,6 +80,7 @@ def make_minigrid_vec_env(
     n_envs: int = 8,
     seed: int = 0,
     use_wrapper: bool = False,
+    agent_view_size: Optional[int] = None,
 ) -> VecEnv:
     """Build a vectorized MiniGrid environment for memory tasks.
 
@@ -94,6 +97,11 @@ def make_minigrid_vec_env(
         seed:        base seed; env i is seeded with `seed + i`.
         use_wrapper: if True, apply MemoryStartWrapper to force corridor-entrance
                      spawn (Phase 0/1 crutch — removes the exploration bottleneck).
+        agent_view_size: if set (odd int ≥3), shrink the egocentric view via
+                     ViewSizeWrapper. Smaller views (e.g. 3) increase positional
+                     aliasing so the task demands MORE memory (RLBenchNet trick):
+                     it turns "solvable without memory" envs like RedBlueDoors
+                     into genuine memory tests. Obs becomes (N, N, 20).
 
     Returns:
         Vectorized environment ready to pass to MemPPO. The encoder will
@@ -105,6 +113,8 @@ def make_minigrid_vec_env(
             env = gym.make(env_name)
             if use_wrapper:
                 env = MemoryStartWrapper(env)
+            if agent_view_size is not None:
+                env = ViewSizeWrapper(env, agent_view_size=agent_view_size)
             env = OneHotPartialObsWrapper(env)
             env = ImgObsWrapper(env)
             env = CastImageFloat32(env)

@@ -51,13 +51,17 @@ class FlatEncoder(nn.Module):
                 nn.ReLU(),
                 nn.Linear(hidden_dim, encoder_dim),
             )
-        elif isinstance(observation_space, gym.spaces.Box) and len(observation_space.shape) == 3:
+        elif (isinstance(observation_space, gym.spaces.Box)
+              and len(observation_space.shape) == 3
+              and min(observation_space.shape[0], observation_space.shape[1]) >= 7):
             # Image obs (H, W, C), channels-last — e.g. MiniGrid's one-hot grid
             # (7, 7, 20). Standard MiniGrid conv stack: three 2×2 convs (with a
             # MaxPool after the first) shrink the 7×7 view to 1×1×64, which a
-            # Linear then maps to encoder_dim. Kernel sizes assume the default
-            # 7×7 partial view; the flatten dim is computed from a dummy pass so
-            # other view sizes still work as long as they don't underflow.
+            # Linear then maps to encoder_dim. The 2×2-conv stack underflows below
+            # 7×7, so SMALLER grids (e.g. a 3×3 reduced view from ViewSizeWrapper)
+            # fall through to the flat-MLP branch instead — there's negligible
+            # spatial structure to exploit at 3×3 anyway, and 3·3·20=180 is a fine
+            # MLP input. The flatten dim is computed from a dummy pass.
             self.obs_mode = "image"
             h, w, c = observation_space.shape
             self.cnn = nn.Sequential(
