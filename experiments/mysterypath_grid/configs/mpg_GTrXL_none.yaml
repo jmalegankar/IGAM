@@ -1,0 +1,28 @@
+env_name: MysteryPath-Grid-v0
+n_envs: 16
+total_timesteps: 10000000
+seed: 0
+cell:
+  name: GTrXL
+  kwargs:
+    n_heads: 4
+    mem_len: 128
+encoder_dim: 128
+encoder_hidden: 256
+lr: 0.00025
+n_steps: 512
+n_epochs: 4
+gamma: 0.995
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 1.0
+max_grad_norm: 0.5
+target_kl: 0.05
+chunk_len: 32
+n_chunks_per_batch: 32
+intrinsic: none
+eval_every_rollouts: 5
+n_eval_episodes: 20
+wandb: true
+wandb_project: memrl-mysterypath-grid

@@ -44,9 +44,22 @@ sys.path.insert(0, str(REPO_ROOT))
 from train import DEFAULT_CELL_KWARGS  # noqa: E402
 
 ENV_NAME = "MysteryPath-Grid-v0"
-CELLS = ["GRU", "Memoryless"]
-INTRINSICS = ["none", "e3b_idm", "rnd", "noveld"]
+
+# Memory-ranking arm: which cells solve MysteryPath with plain PPO (intrinsic=
+# none)? The 11-cell lineup, same as S13 / RedBlueDoors — directly comparable.
+RANKING_CELLS = [
+    "GRU", "LSTM", "mLSTM", "LRU", "Mamba2", "FFM",
+    "GatedDeltaNet", "SHM", "GTrXL", "RetNet", "LinearTransformer",
+]
+# Entanglement arm: does an exploration bonus help a memory cell (GRU), and can
+# it substitute for memory (Memoryless control)? Crossed with the bonuses.
+EXPLORE_CELLS = ["GRU", "Memoryless"]
+EXPLORE_INTRINSICS = ["none", "e3b_idm", "rnd", "noveld"]
 LAMBDA_INTRINSIC = 0.01
+
+# Per-cell overrides, matching the S13 / RedBlueDoors baselines.
+PER_CELL_LR = {"Mamba2": 1.25e-4}                       # half the pixel base lr
+PER_CELL_KWARGS_OVERRIDES = {"GTrXL": {"mem_len": 128}}
 
 BASE = {
     "env_name": ENV_NAME,
@@ -76,16 +89,19 @@ BASE = {
 def build_cfg(cell: str, intrinsic: str) -> dict:
     if cell not in DEFAULT_CELL_KWARGS:
         raise KeyError(f"{cell} not in train.py DEFAULT_CELL_KWARGS")
+    kwargs = dict(DEFAULT_CELL_KWARGS[cell])
+    kwargs.update(PER_CELL_KWARGS_OVERRIDES.get(cell, {}))
     ordered = {
         "env_name": BASE["env_name"],
         "n_envs": BASE["n_envs"],
         "total_timesteps": BASE["total_timesteps"],
         "seed": 0,                      # overridden per run via --seed
-        "cell": {"name": cell, "kwargs": dict(DEFAULT_CELL_KWARGS[cell])},
+        "cell": {"name": cell, "kwargs": kwargs},
         "encoder_dim": BASE["encoder_dim"],
         "encoder_hidden": BASE["encoder_hidden"],
+        "lr": PER_CELL_LR.get(cell, BASE["lr"]),
     }
-    for k in ("lr", "n_steps", "n_epochs", "gamma", "gae_lambda", "clip_range",
+    for k in ("n_steps", "n_epochs", "gamma", "gae_lambda", "clip_range",
               "ent_coef", "vf_coef", "max_grad_norm", "target_kl",
               "chunk_len", "n_chunks_per_batch"):
         ordered[k] = BASE[k]
@@ -159,36 +175,46 @@ def main() -> None:
     cfg_dir.mkdir(parents=True, exist_ok=True)
     scr_dir.mkdir(parents=True, exist_ok=True)
 
-    n = 0
-    for cell in CELLS:
-        for intrinsic in INTRINSICS:
-            cfg = build_cfg(cell, intrinsic)
-            cfg_name = f"mpg_{cell}_{intrinsic}.yaml"
-            with open(cfg_dir / cfg_name, "w") as f:
-                yaml.safe_dump(cfg, f, sort_keys=False)
+    # Union of the two arms, order-preserving + deduped (GRU+none appears in both).
+    ranking = [(c, "none") for c in RANKING_CELLS]
+    explore = [(c, m) for c in EXPLORE_CELLS for m in EXPLORE_INTRINSICS]
+    seen: set[tuple[str, str]] = set()
+    conditions: list[tuple[str, str]] = []
+    for cond in ranking + explore:
+        if cond not in seen:
+            seen.add(cond)
+            conditions.append(cond)
 
-            if intrinsic == "none":
-                scr_name, tag = f"run_{cell}.sh", f"{cell}_none"
-            else:
-                scr_name, tag = f"explore_{cell}_{intrinsic}.sh", f"{cell}_{intrinsic}"
-            body = (_SCRIPT_TEMPLATE
-                    .replace("__CELL__", cell)
-                    .replace("__INTRINSIC__", intrinsic)
-                    .replace("__CFG__", cfg_name)
-                    .replace("__TAG__", tag))
-            p = scr_dir / scr_name
-            p.write_text(body)
-            os.chmod(p, 0o755)
-            n += 1
+    n = 0
+    for cell, intrinsic in conditions:
+        cfg = build_cfg(cell, intrinsic)
+        cfg_name = f"mpg_{cell}_{intrinsic}.yaml"
+        with open(cfg_dir / cfg_name, "w") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+
+        if intrinsic == "none":
+            scr_name, tag = f"run_{cell}.sh", f"{cell}_none"
+        else:
+            scr_name, tag = f"explore_{cell}_{intrinsic}.sh", f"{cell}_{intrinsic}"
+        body = (_SCRIPT_TEMPLATE
+                .replace("__CELL__", cell)
+                .replace("__INTRINSIC__", intrinsic)
+                .replace("__CFG__", cfg_name)
+                .replace("__TAG__", tag))
+        p = scr_dir / scr_name
+        p.write_text(body)
+        os.chmod(p, 0o755)
+        n += 1
 
     run_all = scr_dir / "run_all.sh"
     run_all.write_text(_RUN_ALL_TEMPLATE)
     os.chmod(run_all, 0o755)
 
     print(f"env={ENV_NAME}")
-    print(f"cells={CELLS} intrinsics={INTRINSICS}")
+    print(f"ranking: {len(RANKING_CELLS)} cells x none")
+    print(f"entanglement: {EXPLORE_CELLS} x {EXPLORE_INTRINSICS}")
     print(f"wrote {n} configs + {n} scripts (+ run_all.sh) → {HERE}")
-    print(f"2x4 ablation = {n} conditions x 3 seeds = {n*3} runs")
+    print(f"total = {n} conditions x 3 seeds = {n*3} runs")
 
 
 if __name__ == "__main__":
