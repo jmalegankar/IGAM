@@ -1,0 +1,52 @@
+# Per-script Job TEMPLATE for the MysteryPath-Grid study — one pod (one GPU) per
+# training script. Dedicated (separate from job-template.yaml / rbd-job-template)
+# so the sweeps never interfere. Substituted by k8s/launch-mpg-jobs.sh, which
+# fans one Job per leaf script under experiments/mysterypath_grid/scripts/.
+# Only __JOBNAME__ and __SCRIPT__ are placeholders.
+#
+# GPU + heavier RAM: 84x84x3 pixel obs (PixelEncoder CNN) and a larger rollout
+# buffer than the grid envs. Requires the image to have memory-gym baked in
+# (see Dockerfile).
+#
+# Prereqs in the cluster:
+#   * image r0hanpat1l/memory:latest (rebuilt with memory-gym) reachable
+#   * Secret `wandb` with key `api-key`  (see k8s/wandb-secret.example.yaml)
+# (No PVC — wandb is the system of record: project memrl-mysterypath-grid.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-mpg }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-mpg, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          # Run this script's seeds (parallel on the one GPU; PARALLEL=1).
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/mysterypath_grid"
+            - name: SEEDS
+              value: "0 1 2"
+            - name: PARALLEL
+              value: "1"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 24Gi

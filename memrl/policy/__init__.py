@@ -1,5 +1,5 @@
 from .buffer import MemRolloutBuffer, MemRolloutBufferSamples
-from .encoder import FlatEncoder
+from .encoder import FlatEncoder, PixelEncoder, make_encoder
 from .policy import MemActorCriticPolicy
 
 __all__ = [
@@ -7,4 +7,6 @@ __all__ = [
     "MemRolloutBuffer",
     "MemRolloutBufferSamples",
     "FlatEncoder",
+    "PixelEncoder",
+    "make_encoder",
 ]

@@ -68,6 +68,14 @@ RUN python -m pip install --upgrade pip \
 
  RUN python -m pip install -r requirements.txt
 
+# ── memory-gym (MysteryPath / MortarMayhem pixel memory benchmarks) ──────────
+# Out-of-band because memory-gym pins pygame==2.4.0, which has no wheel for
+# modern Pythons and fails to build. Install a modern pygame first, then
+# memory-gym with --no-deps so the pin can't downgrade it. Imported lazily (only
+# when an id like MysteryPath-Grid-v0 is requested), so inert for other runs.
+RUN python -m pip install "pygame>=2.6" \
+ && python -m pip install memory-gym --no-deps
+
 # ── Runtime knobs the run_*.sh scripts read (all overridable at `docker run`) ─
 #   PYTHON   : no .venv in the image, so use the container interpreter.
 #   DEVICE   : GPU by default; set DEVICE=cpu for a smoke test.
@@ -80,7 +88,7 @@ ENV PYTHON=python \
     PARALLEL=1
 
 # Sanity: fail the build if the package / required libs don't import.
-RUN python -c "import memrl, train, minigrid, wandb, stable_baselines3; print('imports OK')"
+RUN python -c "import memrl, train, minigrid, wandb, stable_baselines3, memory_gym; print('imports OK')"
 
 # Default command: run the full sweep (cells serial, seeds parallel within each).
 # Override with a per-cell script for one-pod-per-cell scheduling, e.g.:

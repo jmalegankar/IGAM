@@ -38,7 +38,7 @@ from torch import Tensor, nn
 from torch.distributions import Categorical
 
 from memrl.cell.base import RecurrentCell
-from memrl.policy.encoder import FlatEncoder
+from memrl.policy.encoder import make_encoder
 
 
 ACTOR_PREFIX = "actor_"
@@ -117,7 +117,7 @@ class MemActorCriticPolicy(nn.Module):
             # One encoder, one cell, both used by actor AND critic. The
             # critic's input is detached at the head, so critic loss does
             # NOT update the shared encoder/cell.
-            self.encoder = FlatEncoder(
+            self.encoder = make_encoder(
                 observation_space=observation_space,
                 encoder_dim=encoder_dim,
                 hidden_dim=encoder_hidden,
@@ -148,12 +148,12 @@ class MemActorCriticPolicy(nn.Module):
                 )
             self.cell_actor = cell_actor
             self.cell_critic = cell_critic
-            self.encoder_actor = FlatEncoder(
+            self.encoder_actor = make_encoder(
                 observation_space=observation_space,
                 encoder_dim=encoder_dim,
                 hidden_dim=encoder_hidden,
             )
-            self.encoder_critic = FlatEncoder(
+            self.encoder_critic = make_encoder(
                 observation_space=observation_space,
                 encoder_dim=encoder_dim,
                 hidden_dim=encoder_hidden,

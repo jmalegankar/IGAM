@@ -118,3 +118,67 @@ class FlatEncoder(nn.Module):
             return self.mlp(feat.reshape(obs.shape[0], -1))
         obs_flat = obs.float().reshape(obs.shape[0], -1)
         return self.mlp(obs_flat)
+
+
+class PixelEncoder(nn.Module):
+    """Nature-DQN CNN encoder for RGB pixel observations.
+
+    Dedicated to pixel envs (e.g. memory-gym's MysteryPath, 84×84×3) — kept
+    SEPARATE from FlatEncoder's MiniGrid path on purpose: a one-hot categorical
+    grid and an RGB frame are different enough (input statistics, scale, spatial
+    smoothness) that sharing a conv stack is the wrong abstraction. Strided convs
+    (8/s4 → 4/s2 → 3/s1) downsample 84×84 to 7×7×64 before the encoder_dim
+    projection — a ~0.5M-param encoder rather than the ~12M a no-stride stack
+    would produce on inputs this large.
+    """
+
+    def __init__(
+        self,
+        observation_space: gym.Space,
+        encoder_dim: int = 64,
+        hidden_dim: int = 128,   # unused; kept for a uniform encoder signature
+    ) -> None:
+        super().__init__()
+        self.encoder_dim = encoder_dim
+        self.obs_mode = "pixel"
+        h, w, c = observation_space.shape
+        self.cnn = nn.Sequential(
+            nn.Conv2d(c, 32, kernel_size=8, stride=4), nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2), nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(),
+        )
+        with torch.no_grad():
+            n_flat = self.cnn(torch.zeros(1, c, h, w)).reshape(1, -1).shape[1]
+        self.mlp = nn.Linear(n_flat, encoder_dim)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        for m in self.modules():
+            if isinstance(m, (nn.Linear, nn.Conv2d)):
+                nn.init.orthogonal_(m.weight, gain=nn.init.calculate_gain("relu"))
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, obs: Tensor) -> Tensor:
+        # (B, H, W, C) channels-last → (B, C, H, W) for Conv2d.
+        feat = self.cnn(obs.float().permute(0, 3, 1, 2))
+        return self.mlp(feat.reshape(obs.shape[0], -1))
+
+
+def make_encoder(
+    observation_space: gym.Space,
+    encoder_dim: int = 64,
+    hidden_dim: int = 128,
+) -> nn.Module:
+    """Pick the encoder class for an observation space.
+
+    Large RGB frames (3-D Box, min(H, W) ≥ 40 — e.g. memory-gym's 84×84×3) get
+    the dedicated Nature-DQN ``PixelEncoder``; everything else (MiniGrid one-hot
+    grids, symbolic Box vectors, Discrete) uses ``FlatEncoder``. The two are
+    deliberately distinct classes — pixel and grid envs are not the same problem.
+    """
+    if (isinstance(observation_space, gym.spaces.Box)
+            and len(observation_space.shape) == 3
+            and min(observation_space.shape[0], observation_space.shape[1]) >= 40):
+        return PixelEncoder(observation_space, encoder_dim, hidden_dim)
+    return FlatEncoder(observation_space, encoder_dim, hidden_dim)
