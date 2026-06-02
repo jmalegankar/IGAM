@@ -51,10 +51,14 @@ RANKING_CELLS = [
     "GRU", "LSTM", "mLSTM", "LRU", "Mamba2", "FFM",
     "GatedDeltaNet", "SHM", "GTrXL", "RetNet", "LinearTransformer",
 ]
-# Entanglement arm: does an exploration bonus help a memory cell (GRU), and can
-# it substitute for memory (Memoryless control)? Crossed with the bonuses.
-EXPLORE_CELLS = ["GRU", "Memoryless"]
-EXPLORE_INTRINSICS = ["none", "e3b_idm", "rnd", "noveld"]
+# Bonus sweep: EVERY cell (the 11-cell lineup + the Memoryless control) gets the
+# two strong bonuses, since plain PPO (none) floors at ~0.2 — the bonus arm is
+# the real test. Run one group at a time via the launcher's ONLY filter:
+#   ONLY='_e3b_idm' k8s/launch-mpg-jobs.sh   then   ONLY='_noveld' ...
+BONUS_CELLS = RANKING_CELLS + ["Memoryless"]
+BONUS_METHODS = ["e3b_idm", "noveld"]
+# rnd kept as a control on the two anchors only (underperforms e3b/noveld).
+RND_CELLS = ["GRU", "Memoryless"]
 LAMBDA_INTRINSIC = 0.01
 
 # Per-cell overrides, matching the S13 / RedBlueDoors baselines.
@@ -175,12 +179,18 @@ def main() -> None:
     cfg_dir.mkdir(parents=True, exist_ok=True)
     scr_dir.mkdir(parents=True, exist_ok=True)
 
-    # Union of the two arms, order-preserving + deduped (GRU+none appears in both).
+    # Arms, order-preserving + deduped:
+    #   ranking      : 11 cells × none
+    #   Memoryless   × none   (control; not in the ranking lineup)
+    #   bonus sweep  : (11 cells + Memoryless) × {e3b_idm, noveld}
+    #   rnd control  : {GRU, Memoryless} × rnd
     ranking = [(c, "none") for c in RANKING_CELLS]
-    explore = [(c, m) for c in EXPLORE_CELLS for m in EXPLORE_INTRINSICS]
+    extra_none = [("Memoryless", "none")]
+    bonus = [(c, m) for c in BONUS_CELLS for m in BONUS_METHODS]
+    rnd = [(c, "rnd") for c in RND_CELLS]
     seen: set[tuple[str, str]] = set()
     conditions: list[tuple[str, str]] = []
-    for cond in ranking + explore:
+    for cond in ranking + extra_none + bonus + rnd:
         if cond not in seen:
             seen.add(cond)
             conditions.append(cond)
@@ -212,7 +222,8 @@ def main() -> None:
 
     print(f"env={ENV_NAME}")
     print(f"ranking: {len(RANKING_CELLS)} cells x none")
-    print(f"entanglement: {EXPLORE_CELLS} x {EXPLORE_INTRINSICS}")
+    print(f"bonus sweep: {len(BONUS_CELLS)} cells x {BONUS_METHODS}")
+    print(f"rnd control: {RND_CELLS} x rnd")
     print(f"wrote {n} configs + {n} scripts (+ run_all.sh) → {HERE}")
     print(f"total = {n} conditions x 3 seeds = {n*3} runs")
 
