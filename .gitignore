@@ -32,3 +32,5 @@ plots/
 k8s/wandb-secret.yaml
 # Test Job with the wandb key pasted inline (see k8s/job-gru-test.yaml header).
 k8s/job-gru-test.yaml
+experiments/s13_baseline/_wandb_export
+*.log
