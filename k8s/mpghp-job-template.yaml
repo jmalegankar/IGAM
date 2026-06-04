@@ -1,0 +1,41 @@
+# Per-script Job TEMPLATE for the MysteryPath HP-sweep (λ × chunk_len × lr).
+# Dedicated launcher k8s/launch-mpghp-jobs.sh substitutes __JOBNAME__/__SCRIPT__.
+# GPU + extra RAM (e3b on 84×84 pixels — same OOM-prone path as the main MPG
+# runs, so request generously). Default SEEDS="0" — it's a 1-seed HP grid.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-mpghp }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-mpghp, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/mysterypath_hpsweep"
+            - name: SEEDS
+              value: "0"
+            - name: PARALLEL
+              value: "1"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 40Gi
