@@ -26,3 +26,4 @@ n_eval_episodes: 20
 wandb: true
 wandb_project: memrl-mpg-hpsweep
 lambda_intrinsic: 0.03
+run_name: GatedDeltaNet-e3b_idm-ck64-lr0p00025-l0p03

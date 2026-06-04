@@ -24,3 +24,4 @@ eval_every_rollouts: 5
 n_eval_episodes: 20
 wandb: true
 wandb_project: memrl-mpg-hpsweep
+run_name: GRU-none-ck128-lr0p00025

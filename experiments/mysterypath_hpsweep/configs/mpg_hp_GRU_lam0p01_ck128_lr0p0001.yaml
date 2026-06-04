@@ -25,3 +25,4 @@ n_eval_episodes: 20
 wandb: true
 wandb_project: memrl-mpg-hpsweep
 lambda_intrinsic: 0.01
+run_name: GRU-e3b_idm-ck128-lr0p0001-l0p01

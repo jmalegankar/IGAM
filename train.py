@@ -258,11 +258,17 @@ def _maybe_init_wandb(cfg: dict, run_dir: Path, enabled: bool,
     intrinsic = cfg.get("intrinsic", "none")
     seed = cfg.get("seed", 0)
     env_name = cfg.get("env_name", "env")
-    run_id = re.sub(r"[^A-Za-z0-9_.-]", "-", f"{cell}-{run_dir.name}")[:120]
+    # cfg["run_name"], if set (e.g. by an HP-sweep generator), makes the run
+    # display name distinct per condition — otherwise every λ/chunk_len/lr combo
+    # of a cell collides on the same "cell-intrinsic-seed" name. Falls back to the
+    # default scheme when absent, so other experiments are unaffected.
+    run_name = cfg.get("run_name")
+    display_name = f"{run_name}-seed{seed}" if run_name else f"{cell}-{intrinsic}-seed{seed}"
+    run_id = re.sub(r"[^A-Za-z0-9_.-]", "-", f"{run_name or cell}-{run_dir.name}")[:120]
     run = wandb.init(
         project=project,
         entity=entity,
-        name=f"{cell}-{intrinsic}-seed{seed}",
+        name=display_name,
         id=run_id,
         resume="allow",
         group=env_name,                 # all cells on an env grouped together

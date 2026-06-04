@@ -26,3 +26,4 @@ n_eval_episodes: 20
 wandb: true
 wandb_project: memrl-mpg-hpsweep
 lambda_intrinsic: 0.003
+run_name: RetNet-e3b_idm-ck32-lr0p00025-l0p003

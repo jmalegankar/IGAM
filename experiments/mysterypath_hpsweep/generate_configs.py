@@ -109,6 +109,10 @@ def build_cfg(cell: str, lam: float, ck: int, lr: float, intrinsic: str = INTRIN
     }
     if intrinsic != "none":
         ordered["lambda_intrinsic"] = lam
+    # Distinct wandb run name per combo (cell + intrinsic + the swept HPs) so the
+    # 19 combos don't collide on "cell-intrinsic-seed".
+    combo = f"ck{ck}-lr{_lr_tag(lr)}" + ("" if intrinsic == "none" else f"-l{_lam_tag(lam)}")
+    ordered["run_name"] = f"{cell}-{intrinsic}-{combo}"
     return ordered
 
 
