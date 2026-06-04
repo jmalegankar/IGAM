@@ -24,18 +24,19 @@ spec:
               value: "cuda"
             - name: RUNS_DIR
               value: "runs/mysterypath_hpsweep"
-            - name: SEEDS
+            - name: SEED
               value: "0"
-            - name: PARALLEL
-              value: "1"
             - name: WANDB_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: wandb
                   key: api-key
+          # 3 cells train in PARALLEL on the one GPU (cell is the parallel axis),
+          # so size CPU/RAM for three concurrent pixel+e3b runs. The ck128 combos
+          # are the GPU-VRAM risk — if a combo OOMs the GPU, run it on its own.
           resources:
             limits:
               nvidia.com/gpu: 1
             requests:
-              cpu: "4"
-              memory: 40Gi
+              cpu: "8"
+              memory: 48Gi
