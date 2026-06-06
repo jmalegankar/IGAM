@@ -1,0 +1,41 @@
+# Per-script Job TEMPLATE for the MysteryPath-Grid 20M headline sweep.
+# Substituted by k8s/launch-mpg20m-jobs.sh — one Job per (seed, cell-pair)
+# script, each running 2 cells in parallel on one GPU (OOM-safe packing).
+# Only __JOBNAME__ and __SCRIPT__ are placeholders.
+#
+# Prereqs: image r0hanpat1l/memory:latest (rebuilt at the right GIT_REF),
+# Secret `wandb` (key api-key). No PVC — wandb is the record (memrl-mpg-20m).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-mpg20m }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-mpg20m, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/mysterypath_20m"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          # 2 cells train in parallel on the one GPU; sized accordingly.
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "6"
+              memory: 32Gi
