@@ -11,8 +11,14 @@ files (which are protobuf and need parsing). If you specifically want the .tfeve
 files, set DOWNLOAD_TB=1 and they land under _wandb_export/tb/<run>/.
 
 Usage:
+    # S13 (default project):
     .venv/bin/python experiments/s13_baseline/export_wandb.py
-    DOWNLOAD_TB=1 .venv/bin/python experiments/s13_baseline/export_wandb.py
+    # Any other project — point WANDB_PROJECT_PATH at it (entity/project):
+    WANDB_PROJECT_PATH=jai-malegaonkar/memrl-mysterypath-grid \
+        .venv/bin/python experiments/s13_baseline/export_wandb.py
+    # Also pull the raw .tfevents files (not just the CSVs):
+    DOWNLOAD_TB=1 WANDB_PROJECT_PATH=jai-malegaonkar/memrl-mysterypath-grid \
+        .venv/bin/python experiments/s13_baseline/export_wandb.py
 """
 
 from __future__ import annotations
@@ -24,7 +30,12 @@ import pandas as pd
 import wandb
 
 PROJECT = os.environ.get("WANDB_PROJECT_PATH", "jai-malegaonkar/memrl-s13-baseline")
-OUT = Path(__file__).resolve().parent / "_wandb_export"
+# Output under <repo>/_wandb_export/<project-name>/ so each project is isolated
+# and this script is reusable for ANY wandb project (memrl-mysterypath-grid,
+# memrl-redbluedoors-8x8, …). Override the location with WANDB_EXPORT_DIR.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT = Path(os.environ.get(
+    "WANDB_EXPORT_DIR", _REPO_ROOT / "_wandb_export" / PROJECT.split("/")[-1]))
 DOWNLOAD_TB = os.environ.get("DOWNLOAD_TB", "0") == "1"
 
 CURVE_BASE = ["eval/mean_reward", "eval/mean_ep_length"]

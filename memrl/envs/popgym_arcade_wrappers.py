@@ -46,12 +46,17 @@ def _gymnax_to_gym_space(s: Any) -> gym.Space:
     if cls == "Discrete":
         return gym.spaces.Discrete(int(s.n))
     if cls == "Box":
-        return gym.spaces.Box(
-            low=np.asarray(s.low),
-            high=np.asarray(s.high),
-            shape=tuple(s.shape),
-            dtype=np.dtype(s.dtype),
-        )
+        shape = tuple(s.shape)
+        # gymnax often gives SCALAR low/high (e.g. 0 and 255 for a pixel Box);
+        # gymnasium rejects a 0-d low alongside an explicit multi-dim shape, so
+        # broadcast scalar bounds up to the full shape.
+        low = np.asarray(s.low, dtype=np.dtype(s.dtype))
+        high = np.asarray(s.high, dtype=np.dtype(s.dtype))
+        if low.shape != shape:
+            low = np.broadcast_to(low, shape).copy()
+        if high.shape != shape:
+            high = np.broadcast_to(high, shape).copy()
+        return gym.spaces.Box(low=low, high=high, shape=shape, dtype=np.dtype(s.dtype))
     raise TypeError(f"Unsupported gymnax space: {cls}")
 
 
