@@ -103,7 +103,10 @@ class RND(IntrinsicRewardModule):
         x = _obs_to_tensor(obs, self.device)
         t = self.target(x)
         p = self.predictor(x)
-        # raw bonus: per-feature L2 distance, summed over dim
+        # Raw bonus: MEAN squared prediction error over feature dim. Burda et al.
+        # (2019) use the squared L2 NORM (sum), which differs only by a constant
+        # 1/feat_dim — fully absorbed by the running-std normalization below, so
+        # the post-norm bonus is identical. (Mean kept for scale-stability.)
         bonus_t = (p - t).pow(2).mean(dim=-1)                  # (n_envs,)
         bonus = bonus_t.detach().cpu().numpy().astype(np.float32)
 

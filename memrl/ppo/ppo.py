@@ -293,19 +293,25 @@ class MemPPO(PPO):
             #      → use built-in running-std normalisation.
             #   3. Otherwise: no intrinsic reward.
             if self.intrinsic_module is not None and self.lambda_intrinsic > 0:
+                # Reset per-episode state for envs that JUST ended (dones), BEFORE
+                # scoring the bonus. VecEnv auto-resets on done, so new_obs[i] is
+                # already the NEXT episode's first obs for done envs — scoring it
+                # against the *previous* episode's episodic memory (the old order,
+                # with reset AFTER compute) mis-scored the boundary obs every
+                # episode. episode_start=dones (not last_episode_starts) so any
+                # module that gates on it sees the correct new-episode flag.
+                done_ids = [i for i, d in enumerate(dones) if d]
+                if done_ids:
+                    self.intrinsic_module.reset_envs(done_ids)
                 bonus = self.intrinsic_module.compute(
                     obs=new_obs,
                     last_obs=self._last_obs,
                     action=actions_np,
-                    episode_start=self._last_episode_starts,
+                    episode_start=dones,
                     side=side,
                     cell_state=self._cell_state,
                 )                                                             # (n_envs,) np.float32
                 rewards = rewards.astype(np.float32) + self.lambda_intrinsic * bonus
-                # Reset per-episode state for envs that just ended an episode.
-                done_ids = [i for i, d in enumerate(dones) if d]
-                if done_ids:
-                    self.intrinsic_module.reset_envs(done_ids)
                 # Lightweight log (per-rollout mean below).
                 if not hasattr(self, "_intrinsic_buf"):
                     self._intrinsic_buf = []
@@ -569,10 +575,14 @@ class MemPPO(PPO):
                 self.policy.optimizer.zero_grad()
                 loss.backward()
 
-                # Per-component grad-norm logging (README discipline).
-                # Clip per component to max_grad_norm. Two cells now —
-                # log them separately so we can see if the critic's
-                # cell drifts differently from the actor's.
+                # Per-component grad clipping — DELIBERATELY not SB3's single
+                # global clip. Each of the 6 submodules (encoder/cell/head ×
+                # actor/critic) is clipped to max_grad_norm independently, which
+                # fits the separate actor/critic backbones and lets us log per-
+                # component norms (catch the critic-cell drifting from the actor's).
+                # Trade-off: the *total* norm can reach ~sqrt(6) ≈ 2.45× max_grad_norm;
+                # the non-finite-grad skip below backstops any real blow-up.
+                # NOTE (paper): document this deviation from standard PPO/SB3.
                 per_comp_max = 0.0
                 nonfinite = False
                 for name, mod in [

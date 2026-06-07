@@ -148,7 +148,11 @@ class GatedDeltaNet(RecurrentCell):
         # ── Gated delta rule update ─────────────────────────────────────────
         # M_t = α · (I − β k kᵀ) M_{t-1}  +  β v kᵀ
         #
-        # Convention: M[b, k_idx, v_idx]. So:
+        # Convention: M[b, k_idx, v_idx] — the TRANSPOSE of Yang et al. 2024's
+        # S[value, key]. Applied consistently to write/erase/read, so the read
+        # r = M·q (below) equals their o = S·q: IDENTICAL input→output, only the
+        # stored matrix is transposed. (A reviewer checking the outer-product order
+        # in isolation may flag it; the read-equivalence is the answer.)
         #   write_term[b, k, v] = β · k[b, k] · v[b, v]
         #   erase_term[b, k, v] = β · k[b, k] · (kᵀ M)[b, v]   (because
         #     (k kᵀ M)[b, k, v] = k[b, k] · Σ_k' k[b, k'] M[b, k', v])
