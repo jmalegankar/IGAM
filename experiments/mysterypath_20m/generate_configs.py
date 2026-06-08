@@ -44,8 +44,23 @@ CELLS = [
     "GatedDeltaNet", "SHM", "GTrXL", "RetNet", "LinearTransformer", "Memoryless",
 ]
 SEEDS = [0, 1, 2, 3, 4]
-# 2 cells per GPU — consecutive pairs of the lineup (+ Memoryless paired last).
-PAIRS = [CELLS[i:i + 2] for i in range(0, len(CELLS), 2)]   # 6 pairs
+# 2 cells per GPU, COST-BALANCED (heavy+light) so two heavy cells never share a
+# GPU and contend. Pairing uses the MEASURED per-cell fps from the completed 20M
+# run (wandb memrl-mpg-20m, 2026-06-08) — heavy→light:
+#   GatedDeltaNet 177 · GTrXL 180 · SHM 181 · RetNet 231 · mLSTM 241 · LRU 280 ·
+#   LinearTransformer 291 · Mamba2 316 · GRU 336 · LSTM 338 · Memoryless 365 · FFM 365
+# Rule: i-th heaviest paired with i-th lightest. This replaces the old consecutive
+# pairing, which put GatedDeltaNet+SHM (the 2 heaviest, combined step-cost ~11.2)
+# on one GPU; the worst balanced pair is now ~8.5 (a ~25% lighter bottleneck job).
+PAIRS = [
+    ["GatedDeltaNet", "FFM"],            # 177 + 365
+    ["GTrXL", "Memoryless"],             # 180 + 365
+    ["SHM", "LSTM"],                     # 181 + 338
+    ["RetNet", "GRU"],                   # 231 + 336
+    ["mLSTM", "Mamba2"],                 # 241 + 316
+    ["LRU", "LinearTransformer"],        # 280 + 291
+]
+assert sorted(c for p in PAIRS for c in p) == sorted(CELLS), "PAIRS must cover all CELLS once"
 
 PER_CELL_KWARGS_OVERRIDES = {"GTrXL": {"mem_len": 128}}     # architecture, not tuning
 
