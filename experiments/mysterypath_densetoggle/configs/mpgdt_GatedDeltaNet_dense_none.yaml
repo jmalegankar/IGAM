@@ -1,7 +1,7 @@
 env_name: MysteryPath-Grid-v0
 env_kwargs:
   reset_options:
-    reward_path_progress: 0.1
+    reward_fall_off: -0.1
 n_envs: 16
 total_timesteps: 10000000
 seed: 0
@@ -27,5 +27,5 @@ intrinsic: none
 eval_every_rollouts: 10
 n_eval_episodes: 20
 wandb: true
-wandb_project: memrl-mpg-densetoggle
+wandb_project: memrl-mpg-fallpenalty
 run_name: GatedDeltaNet-dense-none

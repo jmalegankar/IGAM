@@ -81,10 +81,13 @@ the other (and the task) fixed**, plus controls that certify each axis is doing 
 
 **Toggle A — vary REWARD DENSITY, hold memory + task fixed.**
 Take one memory task and change *only* its reward schedule:
-- **MysteryPath-Grid**: it ships a `reward_path_progress` term we *zeroed out*. Sparse =
-  goal-only (current); Dense = `reward_path_progress=0.1` (+0.1 per new correct path tile).
-  Identical maze, identical invisible-path memory demand — only density changes. **This is
-  the within-task control and the headline figure.**
+- **MysteryPath-Grid**: Sparse = goal-only (default). Dense = a **−0.1 penalty each step the
+  agent steps OFF the invisible path** (`reward_fall_off=-0.1`); the progress term stays 0.
+  Identical maze, identical invisible-path memory demand — only the per-step FEEDBACK density
+  changes. Crucially, an optimal agent never falls off, so the **optimal return stays exactly 1.0,
+  identical to sparse** — this gives density *without* the reward-magnitude confound a +0.1
+  progress reward would introduce (which would lift the max return to ~1.8). **This is the
+  within-task control and the headline figure.**
 - Generic recipe: add a potential-based dense shaping of the *extrinsic* signal; the optimal
   policy is provably unchanged (Ng 1999), so any performance change is about *density*, not task.
 
@@ -121,13 +124,14 @@ blamed for the other.
 |                         | **sparse reward**                                              | **dense reward**                                                              |
 |-------------------------|----------------------------------------------------------------|-------------------------------------------------------------------------------|
 | **memory NOT required** | easy control                                                   | trivial control (full-obs POPGym control; full-obs MysteryPath)               |
-| **memory REQUIRED**     | T-Maze, **MysteryPath (sparse)**, **MiniGrid-Memory/S13**, bsuite-MemoryLength, Memory Maze | **← the under-studied cell:** **POPGym Velocity/Pos-Only CartPole/Pendulum**, **MysteryPath (dense via `path_progress`)**, POPGym-Arcade dense tasks |
+| **memory REQUIRED**     | T-Maze, **MysteryPath (sparse)**, **MiniGrid-Memory/S13**, bsuite-MemoryLength, Memory Maze | **← the under-studied cell:** **POPGym Velocity/Pos-Only CartPole/Pendulum**, **MysteryPath (dense via `reward_fall_off`)**, POPGym-Arcade dense tasks |
 
 **"S13, MysteryMaze, what else" — the concrete list:**
 - **MiniGrid-MemoryS13** — sparse, memory + exploration *entangled* (random spawn). Our
   "everything entangled" point; keep as the messy real-world anchor.
-- **MysteryPath-Grid** — the **toggle env**: sparse (goal-only) ⇄ dense (`path_progress`),
-  same memory demand. This carries the headline within-task experiment.
+- **MysteryPath-Grid** — the **toggle env**: sparse (goal-only) ⇄ dense (`reward_fall_off=-0.1`
+  off-path penalty, optimal return still 1.0), same memory demand. This carries the headline
+  within-task experiment.
 - **POPGym Velocity-/Position-Only CartPole & Pendulum** — **dense + memory required**, vector
   obs, cheap. The clean dense-memory test bed ([POPGym](https://arxiv.org/abs/2303.01859)).
 - **POPGym-Arcade** — pixel; **full/partial-obs toggle** = the memory axis held against fixed
@@ -180,10 +184,11 @@ full/partial** to certify the memory axis, **S13** as the entangled real-world a
 ## 6. Immediate next experiment (turns hypothesis → headline)
 
 **Dense-MysteryPath toggle**, reusing the locked 20M HPs (e3b_idm, λ=0.03, ck=64, lr=1e-4):
-`{reward: sparse, dense} × {none, e3b_idm}` × cells × seeds, where *dense* = MysteryPath with
-`reward_path_progress=0.1` (env_kwargs, already plumbed). Same maze, same memory demand. The
-prediction: e3b helps sparse, stops helping / hurts dense. One cheap run; flips the whole
-paper from "trivial" to "mechanistic."
+`{reward: sparse, dense} × {none, e3b_idm}` × cells × seeds, where *dense* = MysteryPath with a
+**−0.1 off-path penalty** (`reward_fall_off=-0.1`, env_kwargs, verified). Same maze, same memory
+demand, **same optimal return (1.0)** — density without a magnitude confound. The prediction:
+e3b helps sparse, stops helping / hurts dense. One cheap run; flips the whole paper from
+"trivial" to "mechanistic."
 
 ---
 

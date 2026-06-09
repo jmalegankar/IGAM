@@ -4,7 +4,7 @@
 # Only __JOBNAME__ and __SCRIPT__ are placeholders.
 #
 # Prereqs: image r0hanpat1l/memory:latest (rebuilt at the right GIT_REF),
-# Secret `wandb` (key api-key). No PVC — wandb is the record (memrl-mpg-densetoggle).
+# Secret `wandb` (key api-key). No PVC — wandb is the record (memrl-mpg-fallpenalty).
 apiVersion: batch/v1
 kind: Job
 metadata:

@@ -1,9 +1,17 @@
 """B2 — the dense/sparse toggle: the experiment that decides the paper.
 
 Same MysteryPath maze, same memory demand (invisible path), reward density TOGGLED:
-  sparse = goal-only (default, reward_path_progress=0)
-  dense  = +0.1 per newly-stepped correct path tile (reward_path_progress=0.1),
+  sparse = goal-only (default; reward_fall_off=0, reward_path_progress=0)
+  dense  = -0.1 PENALTY each step the agent leaves the invisible path
+           (reward_fall_off=-0.1); progress reward stays 0.
            via env_kwargs reset_options (verified to activate).
+
+Why penalty (not +0.1 progress reward): a penalty for falling off leaves the
+OPTIMAL return at exactly 1.0 (an optimal agent never falls off → goal only),
+identical to sparse. So dense and sparse share the SAME achievable return and
+SAME optimal policy — only the per-step FEEDBACK DENSITY differs. That removes
+the "dense just has more total reward" magnitude confound a progress reward
+would introduce (which pushed the max return to ~1.8).
 
 Crossed with the exploration bonus, holding the winning HPs fixed:
   {GRU, RetNet, GatedDeltaNet} × {sparse, dense} × {none, e3b_idm} × 5 seeds
@@ -40,7 +48,11 @@ CELLS = ["GRU", "RetNet", "GatedDeltaNet"]
 DENSITIES = ["sparse", "dense"]
 INTRINSICS = ["none", "e3b_idm"]
 SEEDS = [0, 1, 2, 3, 4]
-DENSE_ENV_KWARGS = {"reset_options": {"reward_path_progress": 0.1}}
+# Dense = penalty for stepping off the path. Kept small (-0.1) so it stays well
+# below the +1.0 goal — a large penalty would create a "freeze at start to avoid
+# the penalty" local optimum. One number; trivially retunable.
+FALL_OFF_PENALTY = -0.1
+DENSE_ENV_KWARGS = {"reset_options": {"reward_fall_off": FALL_OFF_PENALTY}}
 
 BASE = {
     "env_name": "MysteryPath-Grid-v0",
@@ -64,7 +76,9 @@ BASE = {
     "eval_every_rollouts": 10,
     "n_eval_episodes": 20,
     "wandb": True,
-    "wandb_project": "memrl-mpg-densetoggle",
+    # New project for the FALL-PENALTY dense design — kept separate from the old
+    # `memrl-mpg-densetoggle` (which holds the deprecated +0.1 progress-reward runs).
+    "wandb_project": "memrl-mpg-fallpenalty",
 }
 
 
@@ -138,6 +152,9 @@ echo "All dense-toggle jobs done."
 def main() -> None:
     cfg_dir = HERE / "configs"; scr_dir = HERE / "scripts"
     cfg_dir.mkdir(parents=True, exist_ok=True); scr_dir.mkdir(parents=True, exist_ok=True)
+    # Clear stale generated files so label renames (e.g. dense → dense_fall) leave no orphans.
+    for old in list(cfg_dir.glob("mpgdt_*.yaml")) + list(scr_dir.glob("mpgdt_*.sh")):
+        old.unlink()
 
     for cell in CELLS:
         for density in DENSITIES:
@@ -154,12 +171,18 @@ def main() -> None:
                         .replace("__CELL__", cell)
                         .replace("__DENSITY__", density)
                         .replace("__SEED__", str(seed)))
-                p = scr_dir / f"mpgdt_s{seed}_{cell}_{density}.sh"
+                # The k8s Job name derives from the script FILENAME. Tag the dense
+                # (fall-penalty) scripts `_fall` so their Job names become
+                # `...-dense-fall`, distinct from the old +0.1 progress jobs
+                # (`...-dense`). Internal DENSITY stays "dense" → config lookup
+                # (mpgdt_{cell}_dense_{intr}.yaml) and run_name are unchanged.
+                fname_d = "dense_fall" if density == "dense" else density
+                p = scr_dir / f"mpgdt_s{seed}_{cell}_{fname_d}.sh"
                 p.write_text(body); os.chmod(p, 0o755); n_scr += 1
     ra = scr_dir / "run_all.sh"; ra.write_text(_RUN_ALL_TEMPLATE); os.chmod(ra, 0o755)
 
     n_cfg = len(CELLS) * len(DENSITIES) * len(INTRINSICS)
-    print("env=MysteryPath-Grid  project=memrl-mpg-densetoggle  budget=10M")
+    print("env=MysteryPath-Grid  project=memrl-mpg-fallpenalty  budget=10M")
     print(f"HPs: e3b_idm λ=0.03 ck=64 lr=1e-4 | cells={CELLS} | density={DENSITIES}")
     print(f"wrote {n_cfg} configs + {n_scr} scripts (+ run_all.sh)")
     print(f"= {n_scr} GPU jobs (none+e3b each) = {len(CELLS)*len(DENSITIES)*len(INTRINSICS)*len(SEEDS)} runs")

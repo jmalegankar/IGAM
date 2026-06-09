@@ -25,5 +25,5 @@ lambda_intrinsic: 0.03
 eval_every_rollouts: 10
 n_eval_episodes: 20
 wandb: true
-wandb_project: memrl-mpg-densetoggle
+wandb_project: memrl-mpg-fallpenalty
 run_name: RetNet-sparse-e3b_idm
