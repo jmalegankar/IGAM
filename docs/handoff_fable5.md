@@ -55,8 +55,8 @@ cells (gated RNN / linear-attention / matrix-state SSM) suffice to answer "does 
 zoo (4× compute, 120 jobs) is the camera-ready follow-up *after* the gate passes.
 
 ### (d) ⭐ Redefined "dense" — the key design decision
-Originally dense = `+0.1` per first-visit path tile (progress reward). We **switched to a `−0.1`
-penalty for stepping off the path** (`reward_fall_off=-0.1`) and **removed the progress reward**.
+Originally dense = `+0.1` per first-visit path tile (progress reward). We **switched to a `−0.008` (=1/128, horizon-normalized)
+penalty for stepping off the path** (`reward_fall_off=-0.008`) and **removed the progress reward**.
 
 **Why:** the progress reward pushed the max return to ~1.8 (variable 1.5–2.2 — path length varies
 5–12 tiles), so dense ≠ sparse in *return scale* and a reviewer could call the flip a magnitude

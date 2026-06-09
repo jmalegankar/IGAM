@@ -1,7 +1,7 @@
 env_name: MysteryPath-Grid-v0
 env_kwargs:
   reset_options:
-    reward_fall_off: -0.1
+    reward_fall_off: -0.008
 n_envs: 16
 total_timesteps: 10000000
 seed: 0

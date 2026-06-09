@@ -48,10 +48,15 @@ CELLS = ["GRU", "RetNet", "GatedDeltaNet"]
 DENSITIES = ["sparse", "dense"]
 INTRINSICS = ["none", "e3b_idm"]
 SEEDS = [0, 1, 2, 3, 4]
-# Dense = penalty for stepping off the path. Kept small (-0.1) so it stays well
-# below the +1.0 goal — a large penalty would create a "freeze at start to avoid
-# the penalty" local optimum. One number; trivially retunable.
-FALL_OFF_PENALTY = -0.1
+# Dense = penalty for stepping off the path, horizon-normalized: 1/128 = one
+# step's worth of unit return per fall (POPGym-style 1/T scaling). Calibration
+# (smoke-measured): untrained falls ~11.8x/ep -> penalty mass ~-0.09 vs +1.0
+# goal, so no "freeze at start" basin (at -0.1 the mass was -1.17 > goal).
+# Known trade-off, watch at analysis time: e3b's per-step subsidy
+# (lambda*bonus ~ 0.02) EXCEEDS this fine, so the bonus out-bids the penalty at
+# the margin (num_fails under e3b is the diagnostic); and the density may be
+# too weak to separate none-dense from none-sparse -- if so, bump to -0.05.
+FALL_OFF_PENALTY = -0.008
 DENSE_ENV_KWARGS = {"reset_options": {"reward_fall_off": FALL_OFF_PENALTY}}
 
 BASE = {

@@ -44,7 +44,7 @@ Status: ✅ done · 🟡 partial/in-flight · 🔭 generated, not launched · �
 > / sparse). Where that doc and this one conflict, it wins.
 
 ### B2 ⬜ **Dense-MysteryPath toggle** — *the headline experiment (K3)*
-- Same maze, `env_kwargs: {reward_fall_off: -0.1}` (off-path penalty, verified) → **dense, identical memory demand, same optimal return (1.0).**
+- Same maze, `env_kwargs: {reward_fall_off: -0.008}` (off-path penalty, verified) → **dense, identical memory demand, same optimal return (1.0).**
 - Design: **{sparse, dense} × {none, e3b_idm}** × cells × 5 seeds, winning HPs.
 - **Proves K3: e3b helps sparse, goes neutral/harmful dense — the effect flips with reward density, memory fixed.** This is what converts the paper from "trivial" to a contribution.
 - Cost: ~small relative to B1 (can reuse cells; even GRU+RetNet+GatedDeltaNet × {sparse,dense}×{none,e3b}×5 = 60 runs is enough to start). **Cheapest highest-leverage run.**

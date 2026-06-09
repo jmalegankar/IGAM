@@ -78,7 +78,7 @@ benefit(bonus) ≈ densification-gain(sparsity, α) − bias-cost(λ, ε)
 | Regime / arm | densification | bias | net e3b−none |
 |---|---|---|---|
 | Regime 2: sparse MysteryPath | large | small vs. it | **> 0** ✓ (20M headline) |
-| Regime 1-anti: dense-**fall** (−0.1 off-path) | ≈0 (paid) | **antagonistic** | **< 0** (B2, staged) |
+| Regime 1-anti: dense-**fall** (−0.008 off-path) | ≈0 (paid) | **antagonistic** | **< 0** (B2, staged) |
 | Regime 1-aligned: dense-**progress** (+0.1) | ≈0 (paid) | redundant-ish | **≈ 0** (old runs — complete!) |
 | Regime 3: sealed | — | only bias | ≤ 0 (theory; optional micro-demo) |
 
@@ -89,13 +89,34 @@ information." The naive belief (sparser ⇒ bonuses help more) is wrong at *both
 ### Why dense-fall is *antagonistic*, mechanistically (and how we measure it)
 
 E3B pays for novel embeddings. In MysteryPath, off-path probes are (i) novel → subsidized by
-the bonus, and (ii) penalized −0.1 in the fall arm. Moreover, after a fall the *correct*
+the bonus, and (ii) penalized −0.008 in the fall arm (note: below the per-step bonus scale ~0.02, so the bonus out-bids the fine at the margin — num_fails is the diagnostic; −0.05 is the robustness lever if needed). Moreover, after a fall the *correct*
 behavior is retracing the memorized path prefix — minimally novel → the bonus actively
 *disincentivizes* the right recovery. So in the fall arm the bonus pushes against the task
 signal at the margin. **Measurable signature: `rollout/ep_num_fails_mean` (now logged) should
 be higher under e3b than none in the dense-fall arm.** In the sparse arm the same probing is
 *unpriced information gathering* — there the subsidy is roughly aligned with the optimal
 (probe-to-learn) policy. This is the concrete, falsifiable face of "bias cost."
+
+### Bonus ⊥ policy-memory (verified) — and the two-memories point
+
+`e3b_idm` is **architecturally independent of the policy's memory**: `IDMPhi.encode` uses the
+observation only (`phi_sources.py:55`); `cell_state`/`side` pass through the interface unused;
+the IDM trains on `(o, a, o')`. Coupling to the policy is behavioral only (bonus → reward →
+policy → trajectory distribution). Consequences:
+1. **Fair cell comparison** — every architecture faces statistically the same bonus; the cell
+   ranking under e3b is not contaminated by the bonus reading cell internals.
+2. **E3B carries its own memory** — the per-episode ellipsoid is an episodic memory *of the
+   reward channel* (a soft first-visit detector over φ-space). Two memories: the policy's (for
+   acting) and the bonus's (for credit) — the "memory migrated into the reward function"
+   phenomenon. The bonus is `F_t`-measurable (SCDP-admissible / C1-compliant) precisely because
+   the ellipsoid is a function of observable history. (`CellInnovationPhi`/`eps_mem` is the
+   in-house C1-*violating* contrast class — a future ablation.)
+3. **Curriculum confound, adjudicated by B2.** Systematically collecting an episodic-novelty
+   bonus requires the *policy* to know where it has been — chasing e3b is a memory-exercising
+   auxiliary objective. Rival explanations for "e3b helps": **densifier** (benefit = reward
+   densification → vanishes/flips in dense arms) vs **curriculum** (benefit = memory training →
+   persists in dense arms). The dense-fall arm discriminates: `e3b ≤ none` ⇒ densifier;
+   `e3b > none` ⇒ curriculum. Either way B2 names the mechanism.
 
 ### Why e3b ≫ noveld (retroactive, now explained)
 
@@ -109,7 +130,7 @@ to zero over training. **Bonus benefit tracks alignment-over-time with the faith
 ## 3. Exactness results we get for free (state as lemmas)
 
 1. **Fall penalty preserves the optimal policy EXACTLY.** For any policy π:
-   `J_fall(π) = J_sparse(π) − 0.1·E[Σ discounted falls] ≤ J_sparse(π)`, with equality iff π
+   `J_fall(π) = J_sparse(π) − p·E[Σ discounted falls]  (p=0.008) ≤ J_sparse(π)`, with equality iff π
    never falls. The sparse-optimal π* never falls ⇒ it stays optimal, and
    `J_fall(π*) = J_sparse(π*) = 1.0` (return-matched). The fall arm changes *learnability
    only*, not the solution. (This is why we chose it over progress for B2.)
