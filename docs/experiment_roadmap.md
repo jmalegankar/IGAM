@@ -54,10 +54,12 @@ Status: ✅ done · 🟡 partial/in-flight · 🔭 generated, not launched · �
 - **Proves K4: if raw-e3b hurts dense but potential-based-e3b doesn't, the harm is policy *bias*, not exploration.** Mechanism-level, novel for the memory question.
 - Build cost: implement a potential-based wrapper for the bonus (Φ-shaping; ~a module). Medium.
 
-### B4 ⬜ **POPGym dense-memory** — *independent dense+memory test bed (K3 generality)*
-- Env POPGym Velocity-/Position-Only CartPole/Pendulum (dense reward, memory required). cells × {none, e3b} × seeds.
-- **Proves memory ⊥ sparsity (existence) + K3 on a totally different (vector, control) env → not MysteryPath-specific.**
-- Cost: cheap (vector obs, fast). Needs POPGym wrapper confirmed in harness.
+### B4 🔭 **POPGym-Arcade density toggle** — *K3 generality + the controllability prediction* (supersedes the old B4)
+- **Built:** `experiments/arcade_densetoggle/` + `k8s/launch-arcdt-jobs.sh` (app=memrl-arcdt, 40 jobs at 2 runs/GPU, project `memrl-arcade-toggle`). Pixel 84×84 (resized from 128) → same PixelEncoder + packing profile as MysteryPath.
+- `DeferredReward` wrapper: natively-dense task → sparse twin (terminal lump; same return, same π*). The REVERSE of MysteryPath's toggle.
+- **BattleShipEasy** (controllable revelation, ~10 reward events/ep natively) → predict the reverse flip: e3b > none only when deferred-sparse. **CountRecallEasy** (uncontrollable; dealt stream; obs-richness MATCHED to BattleShip — this is why Arcade replaced vector POPGym, whose tiny discrete obs confounded the contrast) → predict e3b ≈ none at both densities — *sparsity alone is not sufficient; controllable revelation is*.
+- Bonus: the suite's `partial_obs` flag gives **B5** (observability counterfactual) on the same tasks later.
+- Prereq: image rebuilt with the `popgym-arcade` extra (Dockerfile updated). Cost: jax env-stepping is CPU-side (~250+ env-steps/s per run); 10M ≈ overnight per job.
 
 ### B5 ⬜ **POPGym-Arcade observability counterfactual** — *certifies the memory axis*
 - Env POPGym-Arcade, **{full_obs, partial_obs}** × {none, e3b} × cells. (wrapper fixed; jax-cpu.)

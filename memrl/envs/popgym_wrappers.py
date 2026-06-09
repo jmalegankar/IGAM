@@ -39,6 +39,7 @@ import os
 from typing import Any
 
 import gymnasium as gym
+import numpy as np
 import popgym  # noqa: F401 — registers POPGym envs with gymnasium
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
@@ -100,20 +101,19 @@ class FlattenTupleDiscrete(gym.ObservationWrapper):
 
 
 class FlattenMultiDiscrete(gym.ObservationWrapper):
-    """Collapse a MultiDiscrete observation space into a single Discrete.
+    """Collapse a MultiDiscrete observation space into a single Discrete,
+    or — when the joint space is too large — into a multi-one-hot Box.
 
-    Same lossless mixed-base trick as `FlattenTupleDiscrete`, but for
-    `MultiDiscrete` spaces. Several POPGym envs (CountRecall, ...) expose
-    obs as `MultiDiscrete([a, b, ...])` — semantically a fixed-length array
-    of integer indices. SB3's RolloutBuffer prefers a single Discrete; this
-    wrapper folds the MultiDiscrete into one int losslessly so the existing
-    Embedding-based FlatEncoder works without changes.
-
-    Example: CountRecall's `MultiDiscrete([4, 4])` (dealt_index, queried_index)
-    becomes `Discrete(16)` with mapping `(dealt, queried) -> dealt*4 + queried`.
+    Small spaces use the lossless mixed-base trick from `FlattenTupleDiscrete`
+    (CountRecall's `MultiDiscrete([4, 4])` → `Discrete(16)`), which feeds the
+    Embedding-based FlatEncoder. But the joint count is ∏nvec — for wide spaces
+    (Concentration: `MultiDiscrete([3]*52)` → 3^52) a single Discrete overflows
+    and an Embedding table would be absurd. Above `max_discrete` we instead emit
+    the concatenated one-hot encoding, `Box(0, 1, (Σ nvec,))` (Concentration:
+    156-dim), which routes to the MLP encoder path. Both encodings are lossless.
     """
 
-    def __init__(self, env: gym.Env) -> None:
+    def __init__(self, env: gym.Env, max_discrete: int = 4096) -> None:
         super().__init__(env)
         if not isinstance(env.observation_space, gym.spaces.MultiDiscrete):
             raise TypeError(
@@ -126,11 +126,27 @@ class FlattenMultiDiscrete(gym.ObservationWrapper):
                 f"FlattenMultiDiscrete expects a 1-D nvec; got shape {nvec.shape}"
             )
         sizes = [int(n) for n in nvec]
-        self._multipliers, total = _mixed_base_multipliers(sizes)
         self._sizes = sizes
-        self.observation_space = gym.spaces.Discrete(total)
+        total = 1
+        for n in sizes:
+            total *= n
+            if total > max_discrete:
+                break
+        self._one_hot = total > max_discrete
+        if self._one_hot:
+            self._offsets = np.cumsum([0] + sizes[:-1])
+            self._dim = int(sum(sizes))
+            self.observation_space = gym.spaces.Box(0.0, 1.0, (self._dim,),
+                                                    dtype=np.float32)
+        else:
+            self._multipliers, total = _mixed_base_multipliers(sizes)
+            self.observation_space = gym.spaces.Discrete(total)
 
-    def observation(self, obs: Any) -> int:
+    def observation(self, obs: Any):
+        if self._one_hot:
+            out = np.zeros(self._dim, dtype=np.float32)
+            out[self._offsets + np.asarray(obs, dtype=np.int64)] = 1.0
+            return out
         # obs is a numpy array of shape (len(nvec),) — iterate the leading dim.
         return int(sum(int(obs[i]) * m for i, m in enumerate(self._multipliers)))
 
@@ -176,6 +192,36 @@ class ExposePhaseInInfo(gym.Wrapper):
 
 # Env-id prefixes whose obs[0] is a phase flag worth exposing.
 # Currently only Autoencode; add others (e.g. memoroid-style two-phase) here.
+class DeferredReward(gym.Wrapper):
+    """Defer all per-step reward to the terminal step (one lump sum).
+
+    Turns a natively DENSE POPGym task into its SPARSE twin: identical
+    dynamics/observations/memory demand, identical episode return, but zero
+    pre-terminal reward — the density toggle for the revelation/densification
+    experiments (the reverse of MysteryPath's sparse→dense toggle).
+
+    Policy-invariance: deferral reweights r_t's contribution from γ^t to γ^T.
+    For POPGym prediction tasks (actions don't affect dynamics, r_t depends
+    only on a_t) the per-step argmax is unchanged ⇒ π* identical. For tasks
+    where actions steer dynamics (e.g. Battleship) it is invariant up to the
+    γ^(T−t) reweighting — negligible at γ=0.995 with T≈10²; note in paper.
+
+    Placed BEFORE Monitor so logged episode totals stay comparable across arms.
+    """
+
+    def reset(self, **kwargs):
+        self._acc = 0.0
+        return self.env.reset(**kwargs)
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self._acc += float(reward)
+        if terminated or truncated:
+            lump, self._acc = self._acc, 0.0
+            return obs, lump, terminated, truncated, info
+        return obs, 0.0, terminated, truncated, info
+
+
 _PHASE_ENV_PREFIXES = ("popgym-Autoencode",)
 
 
@@ -202,6 +248,7 @@ def make_popgym_vec_env(
     env_name: str,
     n_envs: int = 8,
     seed: int = 0,
+    defer_reward: bool = False,
 ) -> VecEnv:
     """Build a vectorized POPGym environment.
 
@@ -219,6 +266,9 @@ def make_popgym_vec_env(
         env_name: full gym id, e.g. "popgym-RepeatPreviousEasy-v0".
         n_envs:   number of parallel environments.
         seed:     base seed; env i is seeded with `seed + i`.
+        defer_reward: if True, wrap with ``DeferredReward`` — all per-step
+                  reward is withheld and paid as one terminal lump sum
+                  (the SPARSE twin of the natively dense task).
 
     Returns:
         Vectorized environment ready to pass to MemPPO.
@@ -237,6 +287,8 @@ def make_popgym_vec_env(
                 env = FlattenTupleDiscrete(env)
             elif isinstance(env.observation_space, gym.spaces.MultiDiscrete):
                 env = FlattenMultiDiscrete(env)
+            if defer_reward:
+                env = DeferredReward(env)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
             return Monitor(env)

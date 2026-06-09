@@ -73,6 +73,22 @@ benefit(bonus) ≈ densification-gain(sparsity, α) − bias-cost(λ, ε)
   the optimal policy of the shaped MDP (Ng–Harada–Russell 1999 necessity; PBIM), and any
   informative proxy is hackable (Skalse 2022). This cost is paid in *every* regime.
 
+**Controllability condition (makes the (S)-axiom's "controllable" explicit):** α > 0 requires
+the agent's *actions* to influence what is observed — novelty must be *steerable* toward the
+faithful progress variable. In pure prediction tasks (POPGym RepeatPrevious/CountRecall: the
+symbol stream is dealt regardless of actions) novelty is exogenous ⇒ the bonus is
+action-non-discriminative ⇒ α ≈ 0 and the bonus is useless **at any density**. Sparsity alone
+is NOT sufficient for a bonus to help; *unpaid, controllable* revelation is.
+
+**Design caveat that forced pixel (Arcade) over vector POPGym:** on vector POPGym the
+controllability contrast is CONFOUNDED with obs-richness — RepeatPrevious's tiny discrete obs
+space (≈4 distinct φ-points) starves E3B's ellipsoid within a few steps, so "bonus ≈ 0" would
+be over-determined (no novelty *budget*, not just no novelty *control*). POPGym-Arcade fixes
+this: BattleShip (controllable) and CountRecall (uncontrollable) are both 84×84×3 screens of
+comparable visual richness ⇒ controllability is the isolated variable. Bonus: same
+PixelEncoder + e3b config as the MysteryPath headline (only the task family changes), and the
+suite's `partial_obs` flag gives the B5 observability counterfactual later for free.
+
 **Predictions** (each tested by an arm we have or have staged):
 
 | Regime / arm | densification | bias | net e3b−none |
@@ -96,6 +112,26 @@ signal at the margin. **Measurable signature: `rollout/ep_num_fails_mean` (now l
 be higher under e3b than none in the dense-fall arm.** In the sparse arm the same probing is
 *unpriced information gathering* — there the subsidy is roughly aligned with the optimal
 (probe-to-learn) policy. This is the concrete, falsifiable face of "bias cost."
+
+### Penalty calibration — the freeze cliff (MEASURED, cluster, 2026-06-09)
+
+The first dense-fall launch used p=−0.1 (untrained penalty mass ≈ −1.17/ep > the +1.0 goal).
+Outcome across **all 15 none-runs, every cell and seed: return locked at exactly 0.000** — the
+policy learned "don't move" (zero falls, zero goal) before ever finding the goal. The **freeze
+cliff is real and fast**. Meanwhile **all 15 e3b-runs kept probing** (return −0.19…−0.43,
+still paying fines): the bonus acts as **anti-freeze** in the penalty-dominant regime.
+
+Two consequences:
+1. **A −0.1 result would have been a FAKE flip-confirmation:** frozen none (0.0) beats
+   fine-paying e3b (−0.25) ⇒ "e3b < none on dense ✓" — but via the freeze pathology, not via
+   paid-revelation redundancy. Restarted at −0.008 precisely to avoid publishing this.
+2. **The fine cannot deter the bonus at any feasible p** — e3b agents kept buying probes even
+   at 5× its per-step subsidy. So p does NOT need to exceed λ·b̃ (the old optics worry is
+   empirically moot); p tunes only the *none*-arm's health, bracketed by:
+   - too high → freeze (mass ≳ goal; measured at 117%);
+   - too low → toggle doesn't toggle (none-dense ≈ none-sparse; check falls-trajectory +
+     expl_var separation by ~1–2M and bump to −0.025 if absent — local freeze-probes at
+     −0.025/−0.05 map the safe frontier).
 
 ### Bonus ⊥ policy-memory (verified) — and the two-memories point
 
@@ -160,7 +196,7 @@ it is **arm (c), Regime 1-aligned**, free of charge.
 | 4 | **B6** expl_var-recovery vs density | critic-side densification mechanism | free (logged) |
 | 5 | **B3-surgical**: PBRS-ified bonus | causal isolation of bias term | after B2 lands |
 | 6 | **Sealed micro-demo** (purpose-built tiny env) | Regime 3 boundary | optional / appendix |
-| 7 | **B4** POPGym dense-memory | Regime 1 generality (independent env suite) | cheap, vector envs |
+| 7 | **Arcade density toggle** (`experiments/arcade_densetoggle/`, supersedes B4; replaced the vector-POPGym version — see the design caveat above) — `DeferredReward` turns natively-dense pixel tasks sparse (same return, same π*). BattleShipEasy (controllable, ~10 reward events/ep natively) → predict the **reverse flip** (e3b>none only when deferred-sparse); CountRecallEasy (uncontrollable, richness-matched) → predict e3b≈none at **both** densities (controllability control) | Regime 1↔2 generality + the controllability prediction | **built**; 40 GPU jobs (2/GPU, 84×84 parity); needs image rebuilt with the `popgym-arcade` extra |
 
 **The headline figure** becomes a 3-bar (or 4-with-sealed) panel per cell: `e3b − none` on
 {dense-anti, dense-aligned, sparse} — predicted {−, ≈0, +}. Four ordered, theory-derived

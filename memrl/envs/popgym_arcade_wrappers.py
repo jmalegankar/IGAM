@@ -77,6 +77,7 @@ class GymnaxToGymAdapter(gym.Env):
         obs_size: int = 128,
         seed: int = 0,
         normalize_image: bool = True,
+        resize_to: Optional[int] = None,
     ) -> None:
         import jax  # local import — JAX is optional for the rest of memrl
         import popgym_arcade
@@ -88,15 +89,21 @@ class GymnaxToGymAdapter(gym.Env):
         self._key = jax.random.key(int(seed))
         self._state = None
         self._normalize_image = normalize_image
+        self._resize_to = resize_to
 
-        obs_space = _gymnax_to_gym_space(
-            self._env.observation_space(self._env_params)
+        # Derive the obs space from an actual reset rather than trusting
+        # upstream's observation_space(env_params): some popgym-arcade
+        # versions report a fixed default resolution (e.g. 256) regardless of
+        # the obs_size actually used to render (e.g. 128) — the declared and
+        # emitted shapes disagree and DummyVecEnv's obs buffer breaks.
+        probe_obs, _ = self._env.reset(jax.random.key(0), self._env_params)
+        probe = self._to_obs(probe_obs)
+        self.observation_space = gym.spaces.Box(
+            low=0.0 if normalize_image else 0,
+            high=1.0 if normalize_image else 255,
+            shape=probe.shape,
+            dtype=probe.dtype,
         )
-        if normalize_image and isinstance(obs_space, gym.spaces.Box) and obs_space.dtype == np.uint8:
-            obs_space = gym.spaces.Box(
-                low=0.0, high=1.0, shape=obs_space.shape, dtype=np.float32,
-            )
-        self.observation_space = obs_space
         self.action_space = _gymnax_to_gym_space(
             self._env.action_space(self._env_params)
         )
@@ -109,6 +116,14 @@ class GymnaxToGymAdapter(gym.Env):
         arr = np.asarray(obs)
         if self._normalize_image and arr.dtype == np.uint8:
             arr = arr.astype(np.float32) / 255.0
+        if self._resize_to and arr.ndim == 3 and arr.shape[0] != self._resize_to:
+            # Nearest-neighbor resize via index grids — no cv2/PIL dependency.
+            # 84x84 gives exact memory/encoder parity with MysteryPath (the
+            # validated 2-runs-per-GPU packing profile).
+            n = self._resize_to
+            idx = (np.arange(n) * (arr.shape[0] / n)).astype(np.intp)
+            jdx = (np.arange(n) * (arr.shape[1] / n)).astype(np.intp)
+            arr = arr[np.ix_(idx, jdx)]
         return arr
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -142,6 +157,8 @@ def make_popgym_arcade_vec_env(
     seed: int = 0,
     partial_obs: bool = True,
     obs_size: int = 128,
+    resize_to: Optional[int] = None,
+    defer_reward: bool = False,
 ) -> VecEnv:
     """Build a vectorized popgym-arcade env.
 
@@ -153,6 +170,10 @@ def make_popgym_arcade_vec_env(
         seed:     base seed; env i is seeded with ``seed + i``.
         partial_obs: True → POMDP variant (the regime memory cells target).
         obs_size: 128 or 256 — pixel resolution of the rendered obs.
+        resize_to: optional square size to nearest-neighbor downsample the obs
+                  (84 → memory/encoder parity with MysteryPath).
+        defer_reward: if True, withhold all per-step reward and pay it as one
+                  terminal lump (the SPARSE twin of the natively dense task).
     """
     if env_name.startswith(POPGYM_ARCADE_PREFIX):
         gymnax_name = env_name[len(POPGYM_ARCADE_PREFIX):]
@@ -161,12 +182,16 @@ def make_popgym_arcade_vec_env(
 
     def _make_one(rank: int):
         def _init():
+            from .popgym_wrappers import DeferredReward
             env = GymnaxToGymAdapter(
                 gymnax_name,
                 partial_obs=partial_obs,
                 obs_size=obs_size,
                 seed=seed + rank,
+                resize_to=resize_to,
             )
+            if defer_reward:
+                env = DeferredReward(env)
             return Monitor(env)
         return _init
 

@@ -1,0 +1,44 @@
+# Per-script Job TEMPLATE for the POPGym-Arcade density-toggle experiment.
+# Substituted by k8s/launch-arcdt-jobs.sh — one Job per (seed, cell, task,
+# density) script, each running {none, e3b_idm} in parallel on one GPU
+# (obs resized to 84x84 → same packing profile as MysteryPath 2-per-GPU).
+# Only __JOBNAME__ and __SCRIPT__ are placeholders.
+#
+# Prereqs: image r0hanpat1l/memory:latest REBUILT WITH THE popgym-arcade EXTRA
+# (jax; see Dockerfile pip install line), Secret `wandb` (key api-key).
+# No PVC — wandb is the record (memrl-arcade-toggle).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-arcdt }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-arcdt, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/arcade_densetoggle"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          # 2 runs/GPU; jax env-stepping is CPU-side -> ask for more cores
+          # than the pygame envs needed.
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "8"
+              memory: 32Gi

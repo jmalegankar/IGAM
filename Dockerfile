@@ -59,12 +59,13 @@ RUN git clone --depth 1 --branch ${GIT_REF} ${REPO_URL} IGAM
 WORKDIR /workspace/IGAM
 
 # ── Python deps ─────────────────────────────────────────────────────────────
-# `pip install ".[wandb]"` pulls all declared deps — including minigrid (core;
-# imported eagerly by memrl/envs/__init__.py) and wandb (the `[wandb]` extra,
-# needed by the s13_baseline configs' `wandb: true`; disable per-run with
-# EXTRA="--no-wandb"). Self-contained: no out-of-band pip installs.
+# `pip install ".[wandb,popgym-arcade]"` pulls all declared deps — including
+# minigrid (core; imported eagerly by memrl/envs/__init__.py), wandb (the
+# `[wandb]` extra, needed by the s13_baseline configs' `wandb: true`; disable
+# per-run with EXTRA="--no-wandb"), and popgym-arcade + jax (CPU; the
+# arcade_densetoggle experiment). Self-contained: no out-of-band pip installs.
 RUN python -m pip install --upgrade pip \
- && python -m pip install ".[wandb]"
+ && python -m pip install ".[wandb,popgym-arcade]"
 
  RUN python -m pip install -r requirements.txt
 
