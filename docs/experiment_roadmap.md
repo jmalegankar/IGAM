@@ -38,6 +38,11 @@ Status: ✅ done · 🟡 partial/in-flight · 🔭 generated, not launched · �
 - Status: generated + committed (`experiments/mysterypath_20m/`, `memrl-mpg-20m`). Needs image rebuild + `k8s/launch-mpg20m-jobs.sh`.
 - Cost: 60 runs × 20M pixel ≈ the bulk of compute. **Gate: stage seed 0 (6 jobs) first.**
 
+> **Theory upgrade (2026-06-09):** see `revelation_and_densification.md` — the SCDP synthesis
+> reframes the program around *revelation vs density*, makes the old +0.1 runs a free third arm
+> (Regime 1-aligned), and sharpens B2's predictions ({−, ≈0, +} across dense-anti / dense-aligned
+> / sparse). Where that doc and this one conflict, it wins.
+
 ### B2 ⬜ **Dense-MysteryPath toggle** — *the headline experiment (K3)*
 - Same maze, `env_kwargs: {reward_fall_off: -0.1}` (off-path penalty, verified) → **dense, identical memory demand, same optimal return (1.0).**
 - Design: **{sparse, dense} × {none, e3b_idm}** × cells × 5 seeds, winning HPs.

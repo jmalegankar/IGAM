@@ -120,7 +120,11 @@ def make_memory_gym_vec_env(
             env = NormalizeImageObs(env)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
-            return Monitor(env)
+            # memory-gym populates info only at episode end: `success` (goal
+            # reached) and `num_fails` (off-path falls). Capturing them keeps
+            # success disentangled from shaped reward (dense arms) and gives the
+            # bonus-vs-penalty mechanism metric (does e3b raise num_fails?).
+            return Monitor(env, info_keywords=("success", "num_fails"))
         return _init
 
     return DummyVecEnv([_make_one(i) for i in range(n_envs)])

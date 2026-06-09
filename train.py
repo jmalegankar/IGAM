@@ -69,7 +69,7 @@ from typing import Any
 
 import numpy as np
 import yaml
-from stable_baselines3.common.callbacks import CallbackList, EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, EvalCallback
 
 from memrl.cell import (
     DTHLMU,
@@ -281,6 +281,34 @@ def _maybe_init_wandb(cfg: dict, run_dir: Path, enabled: bool,
     print(f"  [wandb] project={project!r} run={run.name!r} id={run_id} "
           f"(sync_tensorboard=on)")
     return run
+
+
+class EpisodeInfoCallback(BaseCallback):
+    """Log Monitor info_keywords (e.g. memory-gym's `success`, `num_fails`)
+    to the SB3 logger each rollout, as means over the episode-info buffer.
+
+    SB3 only auto-logs ep_rew/ep_len; custom Monitor keys otherwise die with
+    the pod (no PVC). `success` keeps goal-reaching disentangled from shaped
+    reward on dense arms; `num_fails` is the bonus-vs-penalty mechanism metric.
+    Envs whose Monitor lacks the keys (POPGym, MiniGrid) simply never log them.
+    """
+
+    def __init__(self, keys: tuple[str, ...] = ("success", "num_fails")) -> None:
+        super().__init__()
+        self._keys = keys
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> None:
+        buf = getattr(self.model, "ep_info_buffer", None)
+        if not buf:
+            return
+        for k in self._keys:
+            vals = [info[k] for info in buf if k in info]
+            if vals:
+                self.logger.record(f"rollout/ep_{k}_mean",
+                                   float(np.mean(vals)))
 
 
 def make_run_dir(
@@ -552,7 +580,7 @@ def main() -> int:
         verbose=1,
     )
 
-    callbacks = CallbackList([eval_cb, ckpt_cb])
+    callbacks = CallbackList([eval_cb, ckpt_cb, EpisodeInfoCallback()])
 
     if resume:
         loaded_steps = load_checkpoint(run_dir, model)
