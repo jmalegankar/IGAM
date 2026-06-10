@@ -36,3 +36,4 @@ experiments/s13_baseline/_wandb_export
 *.log
 *.csv
 _wandb_export/
+experiments/mysterypath_densetoggle/calib_probes_20260610
