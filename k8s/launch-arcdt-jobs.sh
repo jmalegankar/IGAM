@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Launch the POPGym-Arcade density-toggle experiment — one Kubernetes Job
-# (one GPU) per (seed, cell, task, density) script under
-# experiments/arcade_densetoggle/scripts/, each running {none, e3b_idm} in
-# parallel. 40 Jobs = 2 tasks × 2 cells × 2 densities × 5 seeds.
+# (one GPU) per (task, cell, density, intrinsic, seed-group) script under
+# experiments/arcade_densetoggle/scripts/, each running ONE condition at 3
+# (or 2) seeds in parallel. 32 Jobs = 16 conditions × 2 seed-groups (80 runs).
 #
 # Usage:
-#   k8s/launch-arcdt-jobs.sh                      # apply all 40 Jobs
+#   k8s/launch-arcdt-jobs.sh                      # apply all 32 Jobs
 #   DRY_RUN=1 k8s/launch-arcdt-jobs.sh            # print manifests, apply nothing
-#   ONLY='_s0_' k8s/launch-arcdt-jobs.sh          # just seed 0 (8 jobs) — stage by seed
-#   ONLY='BattleShip' k8s/launch-arcdt-jobs.sh    # just BattleShip (20 jobs)
-#   ONLY='_sparse' k8s/launch-arcdt-jobs.sh       # just the deferred arm (20 jobs)
+#   ONLY='_sg0' k8s/launch-arcdt-jobs.sh          # seed-group 0,1,2 (16 jobs) — stage first
+#   ONLY='BattleShip' k8s/launch-arcdt-jobs.sh    # just BattleShip (16 jobs)
+#   ONLY='_sparse' k8s/launch-arcdt-jobs.sh       # just the deferred arm (16 jobs)
 #
 # NB: requires the image rebuilt WITH the popgym-arcade extra (jax) and these
 # scripts baked in (push GIT_REF first).
@@ -36,7 +36,7 @@ for f in "$SCRIPTS_DIR"/arcdt_*.sh; do
   if [[ -n "${ONLY:-}" && ! "$bn" =~ ${ONLY} ]]; then
     continue
   fi
-  stem="${bn%.sh}"                       # arcdt_s0_GRU_BattleShip_dense
+  stem="${bn%.sh}"                       # arcdt_BattleShip_GRU_dense_none_sg0
   suffix="$(printf '%s' "${stem#arcdt_}" | tr 'A-Z' 'a-z' | tr '_' '-')"
   jobname="${JOB_PREFIX}-${suffix}"
   jobname="${jobname:0:63}"; jobname="${jobname%-}"

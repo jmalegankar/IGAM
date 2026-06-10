@@ -75,6 +75,22 @@ class NormalizeImageObs(gym.ObservationWrapper):
         return obs.astype(np.float32) / 255.0
 
 
+class SuccessInfoAlias(gym.Wrapper):
+    """Mirror memory-gym's terminal ``info["success"]`` to ``info["is_success"]``.
+
+    SB3's EvalCallback auto-logs ``eval/success_rate`` from the ``is_success``
+    key (callbacks.py: `info.get("is_success")`); memory-gym uses ``success``.
+    With the alias, the deterministic eval reports goal-clearing directly —
+    disentangled from shaped reward (penalties) on the dense arms.
+    """
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        if "success" in info:
+            info["is_success"] = bool(info["success"])
+        return obs, reward, terminated, truncated, info
+
+
 class StickyResetOptions(gym.Wrapper):
     """Replay a fixed ``options`` dict on every ``reset(...)``.
 
@@ -117,14 +133,23 @@ def make_memory_gym_vec_env(
             env = gym.make(env_name)
             if reset_options:
                 env = StickyResetOptions(env, reset_options)
+            env = SuccessInfoAlias(env)
             env = NormalizeImageObs(env)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
-            # memory-gym populates info only at episode end: `success` (goal
-            # reached) and `num_fails` (off-path falls). Capturing them keeps
-            # success disentangled from shaped reward (dense arms) and gives the
-            # bonus-vs-penalty mechanism metric (does e3b raise num_fails?).
-            return Monitor(env, info_keywords=("success", "num_fails"))
+            # memory-gym populates info only at episode end, but the keys are
+            # env-specific (Monitor KeyErrors on absent keywords): MysteryPath
+            # adds `num_fails` (off-path falls — the bonus-vs-penalty mechanism
+            # metric), MortarMayhem adds `commands_completed` (progress
+            # fraction). `success` is common to the suite. Capturing them keeps
+            # goal-clearing disentangled from shaped reward on dense arms.
+            if "MysteryPath" in env_name:
+                keys = ("success", "num_fails")
+            elif "MortarMayhem" in env_name:
+                keys = ("success", "commands_completed")
+            else:
+                keys = ("success",)
+            return Monitor(env, info_keywords=keys)
         return _init
 
     return DummyVecEnv([_make_one(i) for i in range(n_envs)])

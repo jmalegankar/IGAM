@@ -1,4 +1,4 @@
-env_name: popgym-arcade-CountRecallEasy
+env_name: popgym-arcade-CountRecallMedium
 env_kwargs:
   partial_obs: true
   resize_to: 84

@@ -94,13 +94,15 @@ suite's `partial_obs` flag gives the B5 observability counterfactual later for f
 | Regime / arm | densification | bias | net e3b−none |
 |---|---|---|---|
 | Regime 2: sparse MysteryPath | large | small vs. it | **> 0** ✓ (20M headline) |
-| Regime 1-anti: dense-**fall** (−0.008 off-path) | ≈0 (paid) | **antagonistic** | **< 0** (B2, staged) |
+| Regime 1-anti: dense-**fall** (−0.008 off-path) | n/a — none-arm **self-seals** (freeze, measured) | bonus = **anti-freeze** | **> 0 via rescue** (REVISED — see freeze-cliff section) |
 | Regime 1-aligned: dense-**progress** (+0.1) | ≈0 (paid) | redundant-ish | **≈ 0** (old runs — complete!) |
 | Regime 3: sealed | — | only bias | ≤ 0 (theory; optional micro-demo) |
 
-The **non-monotonicity** is the headline: moving dense → sparse → sealed, the bonus's benefit
-goes **≤0 → >0 → 0**. "Exploration bonuses don't solve hard exploration; they monetize cheap
-information." The naive belief (sparser ⇒ bonuses help more) is wrong at *both* ends.
+The headline is the **sign pattern from one decomposition**: sparse **+** (monetizer) ·
+aligned-dense **≈0** (redundant) · anti-dense **+ via rescue** (the faithful penalty
+endogenously seals the task for the no-bonus learner) · sealed **0** (nothing to monetize).
+"Exploration bonuses don't solve hard exploration; they monetize cheap information" — and the
+naive rule "sparser ⇒ bonuses help more" is wrong in *three* of the four cells.
 
 ### Why dense-fall is *antagonistic*, mechanistically (and how we measure it)
 
@@ -126,12 +128,43 @@ Two consequences:
    fine-paying e3b (−0.25) ⇒ "e3b < none on dense ✓" — but via the freeze pathology, not via
    paid-revelation redundancy. Restarted at −0.008 precisely to avoid publishing this.
 2. **The fine cannot deter the bonus at any feasible p** — e3b agents kept buying probes even
-   at 5× its per-step subsidy. So p does NOT need to exceed λ·b̃ (the old optics worry is
-   empirically moot); p tunes only the *none*-arm's health, bracketed by:
-   - too high → freeze (mass ≳ goal; measured at 117%);
-   - too low → toggle doesn't toggle (none-dense ≈ none-sparse; check falls-trajectory +
-     expl_var separation by ~1–2M and bump to −0.025 if absent — local freeze-probes at
-     −0.025/−0.05 map the safe frontier).
+   at 5× its per-step subsidy. So p does NOT need to exceed λ·b̃; p tunes only the
+   *none*-arm's health.
+
+**UPDATE (local probe, GRU none-arm, seed 0, ~500k steps): the freeze is NOT a magnitude
+problem — even −0.008 collapses.** Falls → ~0 by 300–450k with success pinned at 0, while the
+sparse twin keeps exploring (12→20 falls/ep) and its success LIFTS OFF (0.01→0.12 by 500k).
+Dose-response confirmed at −0.025/−0.05 (faster collapse). Mechanism: fall-avoidance is
+learnable in ~10⁵ steps; goal-finding needs ~10⁶ — the penalty wins the early gradient war at
+any magnitude, and once probing stops, the goal can never be discovered. **A faithful, exactly
+optimum-preserving densifier still destroys learning: return-matched ≠ dynamics-matched.**
+In revelation terms: MysteryPath's revelation channel IS the fall event — pricing it negatively
+makes the agent stop buying information, i.e. the penalty **endogenously seals** the task.
+
+**PILOT VERDICT (local 1.5M complete, GRU seed 0 — logs archived in
+`experiments/mysterypath_densetoggle/calib_probes_20260610/`):**
+- sparse-none: succ **0.13–0.18**, falls ~20 (healthy learner).
+- dense008-none: succ **0.00 for the entire 1.5M**, falls ~0 — freeze with ZERO recovery.
+- dense008-e3b: succ **0.03–0.08**, falls ~21 (= sparse rate: the fine has no deterrent
+  effect on the bonus-driven policy) — **RESCUE CONFIRMED, partial** (~1/3 of sparse).
+- ⭐ **Metric inversion:** the frozen agent's shaped return (0.000) BEATS the rescued
+  agent's (−0.09…−0.15, fines ≈ 21×0.008 vs +0.05 goal). Under penalty shaping the shaped
+  objective itself ranks doing-nothing above working throughout the suboptimal region —
+  even though π* is unchanged. Compare arms on SUCCESS (principled: optimal return =
+  success on both arms); report the inversion as the sharpest face of the lazy-robot effect.
+
+**Registered predictions for the dense-fall cluster arm (REVISED, before data):**
+- `none`-dense: freeze (return ≈ 0, success 0, falls → 0) across seeds/cells.
+- `e3b`-dense: **anti-freeze rescue** — the bonus out-bids the fine, keeps probing, finds the
+  goal; net `e3b − none > 0` ON THE ANTI-ALIGNED DENSE ARM. This is the *opposite* of the
+  naive flip sign, and the decomposition explains it: when the dense signal is
+  anti-exploratory and the task still requires information-purchase, the bonus's
+  policy-shifting "bias" is corrective.
+- The clean "paid revelation ⇒ bonus redundant" Regime-1 test is therefore carried by the
+  **aligned** arm (+0.1 progress, complete) — predict `e3b ≈ none` there.
+- The headline triptych becomes: **sparse: e3b > 0 (monetizer) · aligned-dense: e3b ≈ 0
+  (redundant) · anti-dense: e3b > 0 via rescue (none collapses)** — three signs, one
+  decomposition.
 
 ### Bonus ⊥ policy-memory (verified) — and the two-memories point
 
@@ -196,7 +229,8 @@ it is **arm (c), Regime 1-aligned**, free of charge.
 | 4 | **B6** expl_var-recovery vs density | critic-side densification mechanism | free (logged) |
 | 5 | **B3-surgical**: PBRS-ified bonus | causal isolation of bias term | after B2 lands |
 | 6 | **Sealed micro-demo** (purpose-built tiny env) | Regime 3 boundary | optional / appendix |
-| 7 | **Arcade density toggle** (`experiments/arcade_densetoggle/`, supersedes B4; replaced the vector-POPGym version — see the design caveat above) — `DeferredReward` turns natively-dense pixel tasks sparse (same return, same π*). BattleShipEasy (controllable, ~10 reward events/ep natively) → predict the **reverse flip** (e3b>none only when deferred-sparse); CountRecallEasy (uncontrollable, richness-matched) → predict e3b≈none at **both** densities (controllability control) | Regime 1↔2 generality + the controllability prediction | **built**; 40 GPU jobs (2/GPU, 84×84 parity); needs image rebuilt with the `popgym-arcade` extra |
+| 6b | **MortarMayhem-Grid toggle** (`experiments/mortarmayhem_densetoggle/`, 2026-06-10) — the second-env CORE FLIP: native knobs, sparse vs aligned-dense both max **exactly 1.0** (return-matched by construction, cc=4). Different memory type (sequence WM vs spatial trace). Predict sparse e3b>none; aligned e3b≈none | K3 generality inside the locked env scope | **built**; 30 GPU jobs |
+| 7 | **Arcade density toggle** — ⏸️ **PARKED, out of paper scope** (S13+MysteryPath carry the paper; kept launch-ready for rebuttal; controllability claim stays theory-only) — `DeferredReward` turns natively-dense pixel tasks sparse (same return, same π*). BattleShipEasy (controllable, ~10 reward events/ep natively) → predict the **reverse flip** (e3b>none only when deferred-sparse); CountRecallMedium (uncontrollable, richness-matched) → predict e3b≈none at **both** densities (controllability control) | Regime 1↔2 generality + the controllability prediction | **built**; 32 seed-grouped GPU jobs (3/GPU, 84×84 parity); needs image rebuilt with the `popgym-arcade` extra |
 
 **The headline figure** becomes a 3-bar (or 4-with-sealed) panel per cell: `e3b − none` on
 {dense-anti, dense-aligned, sparse} — predicted {−, ≈0, +}. Four ordered, theory-derived
@@ -218,6 +252,38 @@ it within budget. Expected result: *nobody* solves it, **and the bonus is demons
 busy-but-useless** (novelty consumed, return flat) — paired with a privileged-unsealed control
 (give the shaped reward access to `k` → solvable), which proves the bottleneck is sealing,
 not capacity. Small vector-obs env, GRU only, 3 conditions × 5 seeds — appendix-scale.
+
+## 4b. The real-world frame (LOCKED 2026-06-10): robotics, partial obs, terminal reward
+
+**The paper's motivation is the robotics regime: partially observed, reward only at the end.**
+The regime map IS the robotics map — this framing resolves the env-scope debate:
+
+- **Terminal-only success + a camera that sees everything** = Regime 2 (sparse-but-revealing):
+  the default condition of real robot learning. The bonus helps by *monetizing* unpaid visual
+  information — the principled account of why curiosity-style bonuses ever worked.
+- **Penalty shaping (collision/fall penalties)** — what practitioners actually do to escape
+  sparsity = our anti-dense arm. The freeze result is the controlled, dose-responsed
+  demonstration of the **lazy-robot effect** (agent learns to do nothing to avoid penalties;
+  a faithful, optimum-preserving penalty still collapses learning), and the bonus *rescues* it.
+  The paper's most practice-relevant finding — present it as such.
+- **Engineered progress shaping** (distance-to-goal etc.) = aligned-dense: bonus redundant.
+- **Verify-only-at-the-end with uninformative intermediates** (assembly without test points;
+  RLVR) = Regime 3 (sealed): bonuses provably useless; densify by *unsealing* (instrumentation,
+  verifier decomposition), not by novelty.
+
+**Practitioner rule, robotics phrasing:** terminal-only → bonus is load-bearing (monetizer);
+penalty-shaped → bonus is load-bearing (anti-freeze); progress-shaped → drop the bonus;
+sealed → nothing helps, fix your sensors/verifier.
+
+**Env-scope consequence:** the paper is a *regime study* — S13 (egocentric navigation),
+MysteryPath (invisible-hazard navigation; penalty arm = collision shaping), MortarMayhem
+(instruction-following with delayed execution) are three grid-world instantiations of the
+robotics abstraction. Arcade stays parked: game diagnostics break the embodied narrative
+(this, not aesthetics, was the real objection). Honest limitation to state plainly: no
+3D/continuous embodiment — name **Memory Maze** (3D egocentric, gold-standard memory env)
+as the natural extension; optional satellite: **ViZDoom MyWayHome** (the canonical curiosity
+env, reinterpreted as sparse-but-revealing — memory-essentiality there unverified → opt-in
+only, never critical path).
 
 ## 5. What changes in the paper's claims (and what must NOT be claimed)
 

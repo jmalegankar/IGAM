@@ -1,7 +1,7 @@
 # Per-script Job TEMPLATE for the POPGym-Arcade density-toggle experiment.
-# Substituted by k8s/launch-arcdt-jobs.sh — one Job per (seed, cell, task,
-# density) script, each running {none, e3b_idm} in parallel on one GPU
-# (obs resized to 84x84 → same packing profile as MysteryPath 2-per-GPU).
+# Substituted by k8s/launch-arcdt-jobs.sh — one Job per (task, cell, density,
+# intrinsic, seed-group) script, each running ONE condition at 3 (or 2) seeds
+# in parallel on one GPU (3/GPU safe at ck64 + 84x84 resize).
 # Only __JOBNAME__ and __SCRIPT__ are placeholders.
 #
 # Prereqs: image r0hanpat1l/memory:latest REBUILT WITH THE popgym-arcade EXTRA
@@ -34,7 +34,7 @@ spec:
                 secretKeyRef:
                   name: wandb
                   key: api-key
-          # 2 runs/GPU; jax env-stepping is CPU-side -> ask for more cores
+          # 3 runs/GPU; jax env-stepping is CPU-side -> ask for more cores
           # than the pygame envs needed.
           resources:
             limits:

@@ -293,7 +293,8 @@ class EpisodeInfoCallback(BaseCallback):
     Envs whose Monitor lacks the keys (POPGym, MiniGrid) simply never log them.
     """
 
-    def __init__(self, keys: tuple[str, ...] = ("success", "num_fails")) -> None:
+    def __init__(self, keys: tuple[str, ...] = ("success", "num_fails",
+                                                "commands_completed")) -> None:
         super().__init__()
         self._keys = keys
 

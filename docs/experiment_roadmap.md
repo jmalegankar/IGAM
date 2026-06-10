@@ -54,12 +54,23 @@ Status: ✅ done · 🟡 partial/in-flight · 🔭 generated, not launched · �
 - **Proves K4: if raw-e3b hurts dense but potential-based-e3b doesn't, the harm is policy *bias*, not exploration.** Mechanism-level, novel for the memory question.
 - Build cost: implement a potential-based wrapper for the bonus (Φ-shaping; ~a module). Medium.
 
-### B4 🔭 **POPGym-Arcade density toggle** — *K3 generality + the controllability prediction* (supersedes the old B4)
-- **Built:** `experiments/arcade_densetoggle/` + `k8s/launch-arcdt-jobs.sh` (app=memrl-arcdt, 40 jobs at 2 runs/GPU, project `memrl-arcade-toggle`). Pixel 84×84 (resized from 128) → same PixelEncoder + packing profile as MysteryPath.
+### B4 ⏸️ **POPGym-Arcade density toggle** — *PARKED (2026-06-09): out of paper scope; rebuttal-ready*
+> Scope call: the paper stands on **S13 + MysteryPath** (two families, native toggles, one coherent
+> navigation-memory story). Arcade's deferred-reward toggle is wrapper-imposed and HP-transfer adds
+> ambiguity. Kept BUILT + launch-ready below as the generality option for rebuttal/camera-ready;
+> the controllability prediction stays theoretical (revelation doc). A cheaper second-family toggle,
+> if ever needed: the **S13 density toggle** (faithful cue-side shaping exists — SCDP analysis).
+- **Built:** `experiments/arcade_densetoggle/` + `k8s/launch-arcdt-jobs.sh` (app=memrl-arcdt, 32 seed-grouped jobs at 3 runs/GPU, project `memrl-arcade-toggle`). Pixel 84×84 (resized from 128) → same PixelEncoder + packing profile as MysteryPath.
 - `DeferredReward` wrapper: natively-dense task → sparse twin (terminal lump; same return, same π*). The REVERSE of MysteryPath's toggle.
-- **BattleShipEasy** (controllable revelation, ~10 reward events/ep natively) → predict the reverse flip: e3b > none only when deferred-sparse. **CountRecallEasy** (uncontrollable; dealt stream; obs-richness MATCHED to BattleShip — this is why Arcade replaced vector POPGym, whose tiny discrete obs confounded the contrast) → predict e3b ≈ none at both densities — *sparsity alone is not sufficient; controllable revelation is*.
+- **BattleShipEasy** (controllable revelation, ~10 reward events/ep natively) → predict the reverse flip: e3b > none only when deferred-sparse. **CountRecallMedium** (uncontrollable; dealt stream; obs-richness MATCHED to BattleShip — this is why Arcade replaced vector POPGym, whose tiny discrete obs confounded the contrast) → predict e3b ≈ none at both densities — *sparsity alone is not sufficient; controllable revelation is*.
 - Bonus: the suite's `partial_obs` flag gives **B5** (observability counterfactual) on the same tasks later.
 - Prereq: image rebuilt with the `popgym-arcade` extra (Dockerfile updated). Cost: jax env-stepping is CPU-side (~250+ env-steps/s per run); 10M ≈ overnight per job.
+
+### B4b 🔭 **MortarMayhem-Grid density toggle** — *the second-env CORE FLIP (K3 generality), natively return-matched (added 2026-06-10)*
+- **Built:** `experiments/mortarmayhem_densetoggle/` + `k8s/launch-mmdt-jobs.sh` (app=memrl-mmdt, 30 jobs 2/GPU, project `memrl-mm-toggle`). Same memory-gym pipeline; DIFFERENT memory type (sequence working-memory: memorize-then-execute vs MysteryPath's spatial trace).
+- **Native knobs, exact return-matching:** sparse = `reward_episode_success:1.0` vs aligned-dense = `reward_command_success:0.25` × cc=4 → both arms max **exactly 1.0** (the magnitude confound solved natively — no penalty needed). Command failure terminates the episode → no per-step penalty arm; the anti/rescue cell stays MysteryPath's.
+- cc=4: random success 0.0017 (measured) — hard-but-learnable; fallback cc=3 (0.022) if both intrinsic arms stall at the seed-0 stage.
+- Predictions: sparse e3b > none (monetizer); aligned-dense e3b ≈ none (redundant). Logs `commands_completed` (progress diagnostic) + `success` (rollout + eval).
 
 ### B5 ⬜ **POPGym-Arcade observability counterfactual** — *certifies the memory axis*
 - Env POPGym-Arcade, **{full_obs, partial_obs}** × {none, e3b} × cells. (wrapper fixed; jax-cpu.)

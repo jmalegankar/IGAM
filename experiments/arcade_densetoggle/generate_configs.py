@@ -19,16 +19,16 @@ Two tasks, two predictions:
   * BattleShipEasy  — CONTROLLABLE revelation (you steer which cells get
     probed; ~8% of steps pay natively ≈ 10 events/ep). Prediction: the
     reverse flip — e3b > none on deferred-sparse, e3b ≲ none on native.
-  * CountRecallEasy — UNCONTROLLABLE revelation (the dealt stream is
-    action-independent; natively already quasi-sparse ~2%). Prediction:
+  * CountRecallMedium — UNCONTROLLABLE revelation (the dealt stream is
+    action-independent; ~4 reward events/ep, T≈152). Prediction:
     e3b ≈ none in BOTH arms — sparsity alone is not sufficient for a bonus
     to help; controllable revelation is (alignment α ≈ 0).
 
 Design: 2 tasks × {dense=native, sparse=deferred} × {none, e3b_idm} ×
 {GRU, GatedDeltaNet} × 5 seeds = 80 runs.
-Packing: per (task, cell, density, seed) one GPU runs the {none, e3b} PAIR
-in parallel — obs resized to 84x84 for exact memory/encoder parity with the
-validated MysteryPath 2-per-GPU profile → 40 jobs.
+Packing: SEED-GROUPED, 3 runs/GPU — each job runs ONE condition at seeds
+{0,1,2} or {3,4} in parallel (homogeneous jobs, zero tail-idle; 3/GPU is safe
+at ck64 + 84x84 — the hpsweep's 3/GPU OOM traced to ck128 combos) → 32 jobs.
 
 HPs: transferred from the MysteryPath winner (e3b_idm, λ=0.03, ck=64, lr=1e-4)
 — NOT retuned, consistent with the paper's global-HP fair-comparison story.
@@ -55,12 +55,17 @@ from train import DEFAULT_CELL_KWARGS  # noqa: E402
 TASKS = {
     # short label -> full env id (popgym-arcade- prefix routes the factory)
     "BattleShip": "popgym-arcade-BattleShipEasy",
-    "CountRecall": "popgym-arcade-CountRecallEasy",
+    "CountRecall": "popgym-arcade-CountRecallMedium",
 }
 CELLS = ["GRU", "GatedDeltaNet"]
 DENSITIES = ["dense", "sparse"]          # dense = native; sparse = deferred
 INTRINSICS = ["none", "e3b_idm"]
 SEEDS = [0, 1, 2, 3, 4]
+# 3 runs/GPU (ck64 + 84x84: the hpsweep OOM at 3/GPU traced to ck128 combos).
+# Jobs are seed-grouped: each job runs ONE condition at 3 (or 2) seeds in
+# parallel -> perfectly homogeneous jobs, zero tail-idle. none/e3b live on
+# different GPUs, which is fine: comparisons are 5-seed aggregates.
+SEED_GROUPS = [[0, 1, 2], [3, 4]]
 # partial_obs=True is the memory-demanding POMDP variant; resize_to=84 gives
 # exact parity with the MysteryPath encoder + GPU-packing profile.
 BASE_ENV_KWARGS = {"partial_obs": True, "resize_to": 84}
@@ -119,9 +124,9 @@ def build_cfg(task_label: str, cell: str, density: str, intrinsic: str) -> dict:
 
 _SCRIPT_TEMPLATE = """\
 #!/usr/bin/env bash
-# AUTO-GENERATED. Arcade density toggle: __TASK__ / __CELL__ / __DENSITY__ at
-# seed __SEED__ — runs {none, e3b_idm} in PARALLEL on one GPU (84x84 parity
-# with the validated MysteryPath 2-per-GPU packing).
+# AUTO-GENERATED. Arcade density toggle: __TASK__ / __CELL__ / __DENSITY__ /
+# __INTR__ at seeds {__SEEDS__} — one condition, seeds in PARALLEL on one GPU
+# (3/GPU at ck64 + 84x84; homogeneous job, no tail-idle).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -131,19 +136,19 @@ if [[ -z "${PYTHON:-}" ]]; then
 fi
 DEVICE="${DEVICE:-cuda}"; RUNS_DIR="${RUNS_DIR:-runs/arcade_densetoggle}"; EXTRA="${EXTRA:-}"
 LOGDIR="$HERE/../_logs"; mkdir -p "$LOGDIR"
-TASK="__TASK__"; CELL="__CELL__"; DENSITY="__DENSITY__"; SEED="__SEED__"
-echo "[s$SEED | $TASK $CELL $DENSITY] none + e3b_idm in parallel on one GPU"
+TASK="__TASK__"; CELL="__CELL__"; DENSITY="__DENSITY__"; INTR="__INTR__"
+CFG="$HERE/../configs/arcdt_${TASK}_${CELL}_${DENSITY}_${INTR}.yaml"
+echo "[$TASK $CELL $DENSITY $INTR] seeds __SEEDS__ in parallel on one GPU"
 pids=()
-for intr in none e3b_idm; do
-  CFG="$HERE/../configs/arcdt_${TASK}_${CELL}_${DENSITY}_${intr}.yaml"
-  "$PYTHON" -m train --config "$CFG" --seed "$SEED" \\
+for seed in __SEEDS__; do
+  "$PYTHON" -m train --config "$CFG" --seed "$seed" \\
       --runs-dir "$RUNS_DIR" --device "$DEVICE" $EXTRA \\
-      > "$LOGDIR/${TASK}_${CELL}_${DENSITY}_${intr}_seed${SEED}.log" 2>&1 &
-  pids+=("$!"); echo "  launched $TASK/$CELL/$DENSITY/$intr seed=$SEED (pid $!)"
+      > "$LOGDIR/${TASK}_${CELL}_${DENSITY}_${INTR}_seed${seed}.log" 2>&1 &
+  pids+=("$!"); echo "  launched seed=$seed (pid $!)"
 done
 fail=0; for p in "${pids[@]}"; do wait "$p" || fail=1; done
-[[ "$fail" == "0" ]] || { echo "[s$SEED | $TASK $CELL $DENSITY] a run FAILED — see $LOGDIR"; exit 1; }
-echo "[s$SEED | $TASK $CELL $DENSITY] done."
+[[ "$fail" == "0" ]] || { echo "[$TASK $CELL $DENSITY $INTR] a seed FAILED — see $LOGDIR"; exit 1; }
+echo "[$TASK $CELL $DENSITY $INTR] seeds __SEEDS__ done."
 """
 
 _RUN_ALL_TEMPLATE = """\
@@ -173,25 +178,28 @@ def main() -> None:
                         yaml.safe_dump(cfg, f, sort_keys=False)
 
     n_scr = 0
-    for seed in SEEDS:
-        for task in TASKS:
-            for cell in CELLS:
-                for density in DENSITIES:
-                    body = (_SCRIPT_TEMPLATE
-                            .replace("__TASK__", task)
-                            .replace("__CELL__", cell)
-                            .replace("__DENSITY__", density)
-                            .replace("__SEED__", str(seed)))
-                    p = scr_dir / f"arcdt_s{seed}_{cell}_{task}_{density}.sh"
-                    p.write_text(body); os.chmod(p, 0o755); n_scr += 1
+    for task in TASKS:
+        for cell in CELLS:
+            for density in DENSITIES:
+                for intr in INTRINSICS:
+                    for group in SEED_GROUPS:
+                        seeds_str = " ".join(str(x) for x in group)
+                        body = (_SCRIPT_TEMPLATE
+                                .replace("__TASK__", task)
+                                .replace("__CELL__", cell)
+                                .replace("__DENSITY__", density)
+                                .replace("__INTR__", intr)
+                                .replace("__SEEDS__", seeds_str))
+                        p = scr_dir / f"arcdt_{task}_{cell}_{density}_{intr}_sg{group[0]}.sh"
+                        p.write_text(body); os.chmod(p, 0o755); n_scr += 1
     ra = scr_dir / "run_all.sh"; ra.write_text(_RUN_ALL_TEMPLATE); os.chmod(ra, 0o755)
 
     n_cfg = len(TASKS) * len(CELLS) * len(DENSITIES) * len(INTRINSICS)
-    print("envs=BattleShipEasy+CountRecallEasy (arcade, partial_obs, 84x84)")
+    print("envs=BattleShipEasy+CountRecallMedium (arcade, partial_obs, 84x84)")
     print("project=memrl-arcade-toggle  budget=10M")
     print(f"HPs transferred: e3b_idm λ=0.03 ck=64 lr=1e-4 | cells={CELLS}")
     print(f"wrote {n_cfg} configs + {n_scr} scripts (+ run_all.sh)")
-    print(f"= {n_scr} GPU jobs (none+e3b pair each) = {n_cfg * len(SEEDS)} runs")
+    print(f"= {n_scr} GPU jobs (seed-grouped, ≤3 runs each) = {n_cfg * len(SEEDS)} runs")
 
 
 if __name__ == "__main__":
