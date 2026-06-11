@@ -79,6 +79,11 @@ class GymnaxToGymAdapter(gym.Env):
         normalize_image: bool = True,
         resize_to: Optional[int] = None,
     ) -> None:
+        import os
+        # torch owns the GPU; without this, JAX preallocates CUDA memory in
+        # GPU pods (fine locally on CPU-only machines, fatal when packed 2-3
+        # runs per GPU on the cluster). Env stepping is CPU-bound anyway.
+        os.environ.setdefault("JAX_PLATFORMS", "cpu")
         import jax  # local import — JAX is optional for the rest of memrl
         import popgym_arcade
 

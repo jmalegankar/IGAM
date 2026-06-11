@@ -147,6 +147,8 @@ def make_memory_gym_vec_env(
                 keys = ("success", "num_fails")
             elif "MortarMayhem" in env_name:
                 keys = ("success", "commands_completed")
+            elif "SearingSpotlights" in env_name:
+                keys = ("success", "coins_collected", "agent_health")
             else:
                 keys = ("success",)
             return Monitor(env, info_keywords=keys)

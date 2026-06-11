@@ -54,7 +54,10 @@ Status: ✅ done · 🟡 partial/in-flight · 🔭 generated, not launched · �
 - **Proves K4: if raw-e3b hurts dense but potential-based-e3b doesn't, the harm is policy *bias*, not exploration.** Mechanism-level, novel for the memory question.
 - Build cost: implement a potential-based wrapper for the bonus (Φ-shaping; ~a module). Medium.
 
-### B4 ⏸️ **POPGym-Arcade density toggle** — *PARKED (2026-06-09): out of paper scope; rebuttal-ready*
+### B4 ❌ **POPGym-Arcade density toggle** — *CUT (2026-06-10, FINAL user decision): breaks the embodied narrative*
+> Partial seed-0 launch data retained in `memrl-arcade-toggle` as informal corroboration
+> (BattleShip aligned-dense: e3b ≈ none ✓; CountRecall uncontrollable-sparse: e3b ≪ none —
+> bonus actively harmful where novelty is unsteerable). Not a paper figure.
 > Scope call: the paper stands on **S13 + MysteryPath** (two families, native toggles, one coherent
 > navigation-memory story). Arcade's deferred-reward toggle is wrapper-imposed and HP-transfer adds
 > ambiguity. Kept BUILT + launch-ready below as the generality option for rebuttal/camera-ready;
@@ -71,6 +74,12 @@ Status: ✅ done · 🟡 partial/in-flight · 🔭 generated, not launched · �
 - **Native knobs, exact return-matching:** sparse = `reward_episode_success:1.0` vs aligned-dense = `reward_command_success:0.25` × cc=4 → both arms max **exactly 1.0** (the magnitude confound solved natively — no penalty needed). Command failure terminates the episode → no per-step penalty arm; the anti/rescue cell stays MysteryPath's.
 - cc=4: random success 0.0017 (measured) — hard-but-learnable; fallback cc=3 (0.022) if both intrinsic arms stall at the seed-0 stage.
 - Predictions: sparse e3b > none (monetizer); aligned-dense e3b ≈ none (redundant). Logs `commands_completed` (progress diagnostic) + `success` (rollout + eval).
+
+### B4c 🔭 **SearingSpotlights density toggle** — *the ANTI-DENSE / freeze-rescue replication (added 2026-06-10)*
+- **Built:** `experiments/searingspotlights_densetoggle/` + `k8s/launch-ssdt-jobs.sh` (app=memrl-ssdt, 30 jobs 2/GPU, project `memrl-ss-toggle`). Third memory type: **dead-reckoning** (global light dims; localize self/coin/exit from memory while dodging moving damaging spotlights) — the most robotics-flavored demand in the suite.
+- **Native knobs, exact return-matching:** sparse = env defaults (exit +1.0, coin +0.25, no per-step terms; random succ 0.005); anti = `reward_inside_spotlight=-0.008` (optimal agent never lit → both arms max 1.25).
+- **Freeze boundary-condition test:** spotlights wander → no obvious absorbing zero-cost region → does the lazy-robot collapse require an *avoidable* penalty? No pre-committed sign for none-anti; e3b>none (rescue/robustness) registered.
+- Suite division: MysteryPath = all 3 arms · MortarMayhem = sparse↔aligned · SS = sparse↔anti.
 
 ### B5 ⬜ **POPGym-Arcade observability counterfactual** — *certifies the memory axis*
 - Env POPGym-Arcade, **{full_obs, partial_obs}** × {none, e3b} × cells. (wrapper fixed; jax-cpu.)

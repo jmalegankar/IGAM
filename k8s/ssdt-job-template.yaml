@@ -1,0 +1,42 @@
+# Per-script Job TEMPLATE for the SearingSpotlights density-toggle experiment.
+# Substituted by k8s/launch-ssdt-jobs.sh — one Job per (seed, cell, density)
+# script, each running {none, e3b_idm} in parallel on one GPU.
+# Only __JOBNAME__ and __SCRIPT__ are placeholders.
+#
+# Prereqs: image r0hanpat1l/memory:latest (rebuilt at the right GIT_REF),
+# Secret `wandb` (key api-key). No PVC — wandb is the record (memrl-ss-toggle).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOBNAME__
+  labels: { app: memrl-ssdt }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: memrl-ssdt, job: "__JOBNAME__" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: r0hanpat1l/memory:latest
+          imagePullPolicy: Always
+          command: ["bash", "__SCRIPT__"]
+          env:
+            - name: DEVICE
+              value: "cuda"
+            - name: RUNS_DIR
+              value: "runs/searingspotlights_densetoggle"
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb
+                  key: api-key
+          # 2 runs (none + e3b_idm) in parallel on the one GPU; same 84x84
+          # pixel profile as MysteryPath.
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "6"
+              memory: 32Gi

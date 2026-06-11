@@ -27,6 +27,12 @@ spec:
           env:
             - name: DEVICE
               value: "cuda"
+            # belt-and-braces with the adapter default: jax must never claim
+            # the GPU (torch owns it); also avoids jax host-mem preallocation.
+            - name: JAX_PLATFORMS
+              value: "cpu"
+            - name: XLA_PYTHON_CLIENT_PREALLOCATE
+              value: "false"
             - name: RUNS_DIR
               value: "runs/arcade_densetoggle"
             - name: WANDB_API_KEY
@@ -36,9 +42,14 @@ spec:
                   key: api-key
           # 3 runs/GPU; jax env-stepping is CPU-side -> ask for more cores
           # than the pygame envs needed.
+          # First launch (pair-packed) lost pods after 2-19h in shared-time
+          # waves — pod-level deaths consistent with RAM growth/eviction
+          # (e3b+pixel late RAM growth is a known issue). Explicit limit makes
+          # any OOM clean and visible; bump further if OOMKilled persists.
           resources:
             limits:
               nvidia.com/gpu: 1
+              memory: 48Gi
             requests:
               cpu: "8"
-              memory: 32Gi
+              memory: 36Gi

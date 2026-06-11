@@ -294,7 +294,9 @@ class EpisodeInfoCallback(BaseCallback):
     """
 
     def __init__(self, keys: tuple[str, ...] = ("success", "num_fails",
-                                                "commands_completed")) -> None:
+                                                "commands_completed",
+                                                "coins_collected",
+                                                "agent_health")) -> None:
         super().__init__()
         self._keys = keys
 
