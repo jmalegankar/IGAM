@@ -121,6 +121,10 @@ class TinyReproduce(gym.Env):
 
         if self._t >= self._max_steps:
             truncated = True
+        # success = reproduced ALL k tokens correctly (the optimum, return 1.0).
+        succeeded = bool(self._play_idx >= self.k)
+        info["success"] = float(succeeded)
+        info["is_success"] = succeeded            # SB3 EvalCallback reads this
         return obs, float(reward), terminated, truncated, info
 
 
@@ -137,7 +141,7 @@ def make_tiny_reproduce_vec_env(env_name: str, n_envs: int = 8, seed: int = 0,
             env = TinyReproduce(k=k, v=v, order=order, density=density)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
-            return Monitor(env)
+            return Monitor(env, info_keywords=("success", "is_success"))
         return _init
 
     return DummyVecEnv([_make(i) for i in range(n_envs)])

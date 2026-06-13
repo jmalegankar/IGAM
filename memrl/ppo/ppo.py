@@ -216,12 +216,19 @@ class MemPPO(PPO):
             tb_log_name, progress_bar,
         )
         self._cell_state = self.policy.initial_state(self.n_envs, self.device)
+        # Parameter counts → wandb (capacity-gradient / entanglement figure +
+        # the param-fairness disclosure). cell_actor+cell_critic isolate the
+        # recurrent-cell capacity from the shared encoder/heads.
+        self._n_params_total = sum(p.numel() for p in self.policy.parameters())
+        self._n_params_cell = (
+            sum(p.numel() for p in self.policy.cell_actor.parameters())
+            + sum(p.numel() for p in self.policy.cell_critic.parameters())
+        )
         if self.verbose >= 1:
             cell_name = type(self.policy.cell_actor).__name__
-            n_params = sum(p.numel() for p in self.policy.parameters())
             print(f"  cell={cell_name} (×2: separate actor/critic backbones)  "
-                  f"params={n_params:,}  chunk_len={self.chunk_len}  "
-                  f"n_chunks_per_batch={self.n_chunks_per_batch}")
+                  f"params={self._n_params_total:,} (cell {self._n_params_cell:,})  "
+                  f"chunk_len={self.chunk_len}  n_chunks_per_batch={self.n_chunks_per_batch}")
             print(f"  cell state shapes: " + ", ".join(
                 f"{k}={tuple(v.shape[1:])}" for k, v in self._cell_state.items()
             ))
@@ -404,6 +411,12 @@ class MemPPO(PPO):
             innovation_arr = th.stack(innovation_buf_t).cpu().numpy()
             self.logger.record("debug/innovation_mag_mean", float(innovation_arr.mean()))
             self.logger.record("debug/innovation_mag_max",  float(innovation_arr.max()))
+
+        # Parameter counts (constant; recorded each rollout so they land in wandb
+        # for the capacity-gradient figure regardless of when logging starts).
+        if getattr(self, "_n_params_total", None) is not None:
+            self.logger.record("model/total_params", self._n_params_total)
+            self.logger.record("model/cell_params", self._n_params_cell)
 
         # Intrinsic reward drain (per-rollout mean of the per-step bonus).
         if getattr(self, "_intrinsic_buf", None):

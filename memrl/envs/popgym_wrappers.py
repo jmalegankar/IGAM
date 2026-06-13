@@ -222,6 +222,25 @@ class DeferredReward(gym.Wrapper):
         return obs, 0.0, terminated, truncated, info
 
 
+class _SuccessOnTerminated(gym.Wrapper):
+    """Emit info['success']/['is_success'] = terminated-and-not-truncated.
+
+    For Battleship/MineSweeper, the env sets terminated=True exactly when all
+    ships are sunk (the solve); truncated=True is running out of steps. So this
+    gives a clean per-episode success signal (max return 1.0) for the headline
+    "compare on success" metric. Present on every step so Monitor's
+    info_keywords never KeyErrors.
+    """
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        info = dict(info)
+        ok = bool(terminated and not truncated)
+        info["success"] = float(ok)
+        info["is_success"] = ok
+        return obs, reward, terminated, truncated, info
+
+
 class ExposeActionCoordsInObs(gym.ObservationWrapper):
     """Append the last MultiDiscrete action (normalized) to a scalar/Discrete obs.
 
@@ -341,6 +360,7 @@ def make_popgym_vec_env(
         if defer_reward:
             raise ValueError("autoencode_density already controls reward timing; "
                              "do not combine with defer_reward")
+    is_battleship = env_name.startswith(("popgym-Battleship", "popgym-MineSweeper"))
 
     def _make_one(rank: int):
         def _init():
@@ -369,9 +389,16 @@ def make_popgym_vec_env(
                 env = FlattenMultiDiscrete(env)
             if defer_reward or autoencode_density == "sparse":
                 env = DeferredReward(env)
+            # Battleship/MineSweeper: terminated == all ships sunk == solved, so
+            # success = terminated-and-not-truncated. Emit it for the headline
+            # success metric (sits last so it sees final term/trunc).
+            if is_battleship:
+                env = _SuccessOnTerminated(env)
+            mon_kw = ({"info_keywords": ("success", "is_success")}
+                      if (autoencode_density is not None or is_battleship) else {})
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
-            return Monitor(env)
+            return Monitor(env, **mon_kw)
         return _init
 
     vec_cls = _resolve_vec_env_cls(n_envs)

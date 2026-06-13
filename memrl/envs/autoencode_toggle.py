@@ -117,4 +117,9 @@ class AutoencodeDensityToggle(gym.Wrapper):
         info["rm_state"] = remaining
         info["n_correct"] = self._play_idx
         info["is_correct"] = correct
+        # success = reproduced ALL N correctly (the optimum, return 1.0). Always
+        # present in play-phase info so Monitor(info_keywords=...) never KeyErrors.
+        succeeded = bool(self._play_idx >= self._N)
+        info["success"] = float(succeeded)
+        info["is_success"] = succeeded
         return obs, float(reward), terminated, bool(trunc), info

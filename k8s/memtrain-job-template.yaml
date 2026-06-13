@@ -1,15 +1,15 @@
-# Per-RUN Job TEMPLATE for the memory-training redo (experiments/memory_training).
-# Substituted by k8s/launch-memtrain-jobs.sh — one Kubernetes Job (one GPU) per
-# launch script. The registry now emits ONE script per run (one intrinsic), so a
-# Job runs exactly one `python -m train` — no intrinsic-packing, no OOM risk, and
-# bonus-vs-none stays fair because seeds are matched across Jobs.
-# The launcher substitutes the job name and the bash command path.
+# Per-RUN(s) Job TEMPLATE for the memory-training redo (experiments/memory_training).
+# Substituted by k8s/launch-memtrain-jobs.sh. With PACK=1 (default) one Job runs
+# one `python -m train` on one GPU — no OOM risk, fair (seeds matched across Jobs).
+# With PACK=N the launcher fills __COMMAND__ to run N already-emitted run-scripts
+# in parallel on the one GPU (they share the device); __CPU__/__MEM__ scale with N.
+# Placeholders: __JOBNAME__ __COMMAND__ __CPU__ __MEM__.
 #
 # Prereqs: image rebuilt at the CURRENT git ref (new envs: tiny_reproduce,
-# autoencode_toggle, ExposeActionCoordsInObs; pbim; SnapshotCallback; E3B
-# MultiDiscrete fix; done-step fix; registry configs). Secret `wandb` (key
-# api-key). No PVC — wandb is the record (memrl-memtrain-*); snapshots upload as
-# wandb artifacts (--snapshot-to-wandb).
+# autoencode_toggle, ExposeActionCoordsInObs/_SuccessOnTerminated; pbim;
+# SnapshotCallback; E3B MultiDiscrete fix; done-step fix; success+param logging;
+# registry configs). Secret `wandb` (key api-key). No PVC — wandb is the record
+# (memrl-memtrain-*); snapshots upload as wandb artifacts (--snapshot-to-wandb).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -27,7 +27,7 @@ spec:
         - name: trainer
           image: r0hanpat1l/memory:latest
           imagePullPolicy: Always
-          command: ["bash", "__SCRIPT__"]
+          command: __COMMAND__
           env:
             - name: DEVICE
               value: "cuda"
@@ -36,11 +36,9 @@ spec:
                 secretKeyRef:
                   name: wandb
                   key: api-key
-          # One training run per Job (16 envs, pixel-CNN + recurrent + optional
-          # E3B/PBIM/NovelD module). Sized for a single run.
           resources:
             limits:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 1            # PACK runs SHARE this one GPU
             requests:
-              cpu: "5"
-              memory: 20Gi
+              cpu: "__CPU__"
+              memory: __MEM__Gi
