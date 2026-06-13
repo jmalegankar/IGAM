@@ -67,11 +67,16 @@ for ((i = 0; i < ${#FILES[@]}; i += PACK)); do
   jobname="${JOB_PREFIX}-$(printf '%s' "$stem" | tr 'A-Z/_' 'a-z--')"
   [[ "$PACK" -gt 1 ]] && jobname="${jobname}-x${PACK}"
   jobname="$(printf '%s' "$jobname" | tr -s '-')"; jobname="${jobname:0:63}"; jobname="${jobname%-}"
-  # command: PACK=1 → ["bash","<script>"]; PACK>1 → ["bash","-c","bash a & bash b & wait"]
+  # command: PACK=1 → ["bash","<script>"]; PACK>1 → run all in parallel but
+  # WAIT ON EACH pid, log which run failed, and exit nonzero if ANY failed so the
+  # Job shows Failed (a silent partial crash would otherwise vanish from wandb).
+  # Survivors still finish — their data is already logged live.
   if [[ "$PACK" -eq 1 ]]; then
     cmd="[\"bash\", \"${chunk[0]}\"]"
   else
-    inner=""; for s in "${chunk[@]}"; do inner+="bash $s & "; done; inner+="wait"
+    inner="p=(); n=(); "
+    for s in "${chunk[@]}"; do inner+="bash $s & p+=(\$!); n+=($s); "; done
+    inner+="f=0; for i in \${!p[@]}; do wait \${p[\$i]} || { echo PACK-RUN-FAILED:\${n[\$i]}; f=1; }; done; exit \$f"
     cmd="[\"bash\", \"-c\", \"$inner\"]"
   fi
   # bash string replacement (NOT sed): cmd contains '&' which sed treats as the
