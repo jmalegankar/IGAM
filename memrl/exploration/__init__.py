@@ -27,6 +27,7 @@ from .icm import ICM
 from .none import NoBonus
 from .noveld import NovelD
 from .phi_sources import CellInnovationPhi, IDMPhi, ObsPhi, PhiSource, RandomPhi
+from .pbim import PBIM, make_pbim_e3b_idm
 from .rnd import RND
 
 
@@ -78,6 +79,14 @@ def make_intrinsic(
         return E3BIDM(n_envs=n_envs, obs_dim=obs_dim, n_actions=n_actions,
                       device=device, **kwargs)
 
+    if name == "pbim_e3b_idm":
+        # Potential-based delivery of the canonical E3BIDM bonus: policy-invariant
+        # densification arm (see exploration/pbim.py). `gamma` MUST match PPO's.
+        if n_actions is None or n_actions <= 0:
+            raise ValueError("pbim_e3b_idm requires n_actions=<Discrete vocab>")
+        return make_pbim_e3b_idm(n_envs=n_envs, obs_dim=obs_dim,
+                                 n_actions=n_actions, device=device, **kwargs)
+
     if name.startswith("e3b_"):
         source_name = name.split("_", 1)[1]
         if source_name == "rand":
@@ -104,6 +113,7 @@ __all__ = [
     "RND",
     "E3B",
     "E3BIDM",
+    "PBIM", "make_pbim_e3b_idm",
     "NovelD",
     "ICM",
     "PhiSource", "RandomPhi", "IDMPhi", "ObsPhi", "CellInnovationPhi",

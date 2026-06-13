@@ -1,0 +1,249 @@
+"""PBIM — Potential-Based Intrinsic Motivation wrapper.
+
+Wraps ANY episodic intrinsic module (canonically E3BIDM) and delivers its
+guidance in *potential-based* form, so the shaped reward provably preserves the
+optimal policy of the TRUE task (Ng–Harada–Russell 1999) while still densifying
+the critic's learning signal.
+
+Why this module exists (the paper's load-bearing ablation, "C2")
+----------------------------------------------------------------
+The headline claim is that an episodic bonus trains the recurrent memory through
+a *behavioral* channel: bonus → advantage → trajectory distribution → the data
+the memory write is trained on. That channel carries TWO things at once:
+
+  (1) DENSIFICATION — denser reward events let the critic learn value pre-terminal
+      (a potential-based effect: it does not change the optimal policy);
+  (2) POLICY BIAS / DISTRIBUTION-SHIFT — the non-potential residual ε that
+      actually moves the policy (Skalse 2022 hackability; the "ε cost").
+
+Raw E3B mixes the two. PBIM isolates (1): it keeps the densification but strips
+the policy-altering bias by construction. The adjudication:
+
+  * PBIM-e3b  ≈  raw-e3b   ⇒  the benefit is DENSIFICATION (critic-side credit).
+  * PBIM-e3b  <  raw-e3b   ⇒  the behavioral/distribution channel is load-bearing
+                             (chasing novelty *exercises* memory in a way that
+                              pure densification does not).
+
+Either outcome is a result, and the pair pins down the mechanism behind the
+decodability curve (see docs/decodability_probe_spec.md).
+
+Construction of the potential
+-----------------------------
+Following the PBIM transform (Forbes et al. 2024, "Potential-Based Reward Shaping
+for Intrinsic Motivation"), the potential is the *value function of the intrinsic
+reward*:  Φ(s) ≈ V_int(s) = E[ Σ_k γ^k b_{t+k} ].  We learn V_int by TD on the
+raw bonus stream, then deliver
+
+      F_t = γ · Φ(s_{t+1}) − Φ(s_t)
+
+as the shaping reward IN PLACE OF the raw bonus. Over any trajectory this
+telescopes to a constant offset (−Φ(s_0) plus the terminal Φ), so the optimal
+policy of r_ext is unchanged, but the per-step F front-loads the intrinsic
+guidance into the value targets exactly as a dense reward would.
+
+The potential head sits on the base module's φ feature (detached), so it inherits
+E3B's controllable-feature representation for free and adds negligible compute.
+
+NOTE on the ≥0 contract: unlike other intrinsic modules, PBIM returns a SIGNED
+shaping term (potential differences are negative as often as positive). This is
+correct — PPO adds `lambda_intrinsic * bonus` to the reward (ppo.py) and a signed
+PBRS term is exactly what policy-invariance requires. Do not clip it to ≥0.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import torch
+import torch.nn as nn
+from torch import Tensor
+
+from .base import IntrinsicRewardModule
+from .e3b_module import E3BIDM
+
+
+class PBIM(IntrinsicRewardModule):
+    """Potential-based wrapper around an episodic intrinsic module.
+
+    Args:
+        base:            an instantiated IntrinsicRewardModule with a `.phi`
+                         feature source (E3BIDM is the intended base).
+        gamma:           discount used by training (MUST match PPO's gamma so the
+                         telescoping is consistent with the value targets).
+        potential_hidden: width of the V_int head.
+        lr:              Adam LR for the potential head.
+        fit_epochs:      passes over the buffered transitions per update().
+        scale:           optional output scale on F (keeps F on the same numeric
+                         scale as the raw bonus; the paper holds lambda_intrinsic
+                         fixed across arms and tunes nothing here).
+    """
+
+    def __init__(
+        self,
+        base: IntrinsicRewardModule,
+        *,
+        gamma: float = 0.995,
+        potential_hidden: int = 128,
+        lr: float = 1e-3,
+        fit_epochs: int = 4,
+        scale: float = 1.0,
+        device: torch.device | str = "cpu",
+    ) -> None:
+        super().__init__(n_envs=base.n_envs, device=device)
+        if not hasattr(base, "phi"):
+            raise ValueError(
+                "PBIM needs a base module exposing `.phi` (a PhiSource). "
+                "Use E3BIDM / E3B as the base."
+            )
+        self.base = base
+        self.gamma = float(gamma)
+        self.fit_epochs = int(fit_epochs)
+        self.scale = float(scale)
+
+        feat_dim = int(base.phi.dim)
+        self.potential = nn.Sequential(
+            nn.Linear(feat_dim, potential_hidden), nn.ReLU(),
+            nn.Linear(potential_hidden, potential_hidden), nn.ReLU(),
+            nn.Linear(potential_hidden, 1),
+        ).to(self.device)
+        # Small init so Φ starts near 0 (shaped reward starts near 0).
+        for m in self.potential.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=0.1)
+                nn.init.zeros_(m.bias)
+
+        self.opt = torch.optim.Adam(self.potential.parameters(), lr=lr)
+
+        # Transition buffer of φ-FEATURES (small) for fitting V_int.
+        # Stores (phi_s, phi_s2, raw_b, cross_boundary) per env per step.
+        self._feat_s: list[np.ndarray] = []
+        self._feat_s2: list[np.ndarray] = []
+        self._raw_b: list[np.ndarray] = []
+        self._boundary: list[np.ndarray] = []
+        self._last_diag: dict[str, float] = {}
+
+    # ── potential helper ────────────────────────────────────────────────────
+    @torch.no_grad()
+    def _phi_feat(self, obs: Any, side: dict, cell_state: dict) -> Tensor:
+        """φ feature for obs (detached, on device). IDMPhi.encode is obs-only."""
+        return self.base.phi.encode(obs, side, cell_state).to(self.device)
+
+    @torch.no_grad()
+    def _potential(self, feat: Tensor) -> Tensor:
+        return self.potential(feat).squeeze(-1)
+
+    # ── required ──────────────────────────────────────────────────────────────
+    @torch.no_grad()
+    def compute(self, obs, last_obs, action, episode_start, side, cell_state) -> np.ndarray:
+        # 1) advance the base module (updates the episodic ellipsoid, records its
+        #    own raw-bonus diagnostics) and grab the raw bonus as the V_int target.
+        raw_b = self.base.compute(obs, last_obs, action, episode_start, side, cell_state)
+        raw_b = np.asarray(raw_b, dtype=np.float32)
+
+        # 2) features for s_t (last_obs) and s_{t+1} (obs).
+        feat_s = self._phi_feat(last_obs, side, cell_state)
+        feat_s2 = self._phi_feat(obs, side, cell_state)
+
+        # 3) shaped reward F_t = γ Φ(s_{t+1}) − Φ(s_t), zeroed across resets
+        #    (episode_start[i]=True ⇒ (last_obs_i → obs_i) straddles an auto-reset,
+        #    not a real transition).
+        V_s = self._potential(feat_s)
+        V_s2 = self._potential(feat_s2)
+        F = self.gamma * V_s2 - V_s
+        es = torch.as_tensor(np.asarray(episode_start, dtype=bool), device=self.device)
+        F = torch.where(es, torch.zeros_like(F), F)
+        F_np = (self.scale * F).detach().cpu().numpy().astype(np.float32)
+        F_np = np.nan_to_num(F_np, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # 4) stash features + target for the V_int fit in update().
+        self._feat_s.append(feat_s.detach().cpu().numpy())
+        self._feat_s2.append(feat_s2.detach().cpu().numpy())
+        self._raw_b.append(raw_b)
+        self._boundary.append(np.asarray(episode_start, dtype=bool))
+
+        self._record_bonus(F_np)  # diagnostics track the SHAPED term
+        return F_np
+
+    # ── optional hooks ──────────────────────────────────────────────────────
+    def update(self, rollout: Any) -> dict[str, float]:
+        # (a) train the base's learned φ / IDM exactly as usual.
+        base_diag = self.base.update(rollout)
+
+        # (b) fit V_int by TD on the buffered raw-bonus stream.
+        if not self._feat_s:
+            return {f"base_{k}": v for k, v in base_diag.items()}
+
+        s = torch.as_tensor(np.concatenate(self._feat_s, 0), device=self.device)
+        s2 = torch.as_tensor(np.concatenate(self._feat_s2, 0), device=self.device)
+        b = torch.as_tensor(np.concatenate(self._raw_b, 0), device=self.device)
+        # Within-episode transitions only (a reset boundary breaks telescoping).
+        keep = ~torch.as_tensor(np.concatenate(self._boundary, 0), device=self.device)
+        s, s2, b = s[keep], s2[keep], b[keep]
+
+        last_loss = 0.0
+        if s.shape[0] > 0:
+            N = s.shape[0]
+            bs = 4096
+            for _ in range(self.fit_epochs):
+                perm = torch.randperm(N, device=self.device)
+                for i in range(0, N, bs):
+                    idx = perm[i:i + bs]
+                    with torch.no_grad():
+                        target = b[idx] + self.gamma * self.potential(s2[idx]).squeeze(-1)
+                    pred = self.potential(s[idx]).squeeze(-1)
+                    loss = torch.mean((pred - target) ** 2)
+                    self.opt.zero_grad(set_to_none=True)
+                    loss.backward()
+                    self.opt.step()
+                    last_loss = float(loss.detach())
+
+        with torch.no_grad():
+            v_mean = float(self.potential(s).mean()) if s.shape[0] else 0.0
+
+        # clear buffers
+        self._feat_s.clear(); self._feat_s2.clear()
+        self._raw_b.clear(); self._boundary.clear()
+
+        out = {f"base_{k}": v for k, v in base_diag.items()}
+        out.update({
+            "pbim_potential_loss": last_loss,
+            "pbim_V_int_mean": v_mean,
+        })
+        self._last_diag = out
+        return out
+
+    def reset_envs(self, env_ids) -> None:
+        self.base.reset_envs(env_ids)
+
+    def diagnostics(self) -> dict[str, float]:
+        base = super().diagnostics()  # shaped-term mean/max/std
+        base.update(self._last_diag)
+        return base
+
+
+def make_pbim_e3b_idm(
+    *,
+    n_envs: int,
+    obs_dim: int,
+    n_actions: int,
+    gamma: float = 0.995,
+    device: torch.device | str = "cpu",
+    **kwargs,
+) -> PBIM:
+    """Convenience builder: PBIM wrapping the canonical E3BIDM base.
+
+    `kwargs` are forwarded to E3BIDM (lambda_reg, hidden_dim, lr, idm_epochs, …)
+    EXCEPT PBIM-specific keys (gamma, potential_hidden, lr_pbim, fit_epochs, scale)
+    which are popped here. Keep E3BIDM's config IDENTICAL to the raw-e3b arm so the
+    only difference between arms is potential-vs-raw delivery.
+    """
+    pbim_keys = {
+        "potential_hidden": kwargs.pop("potential_hidden", 128),
+        "lr": kwargs.pop("lr_pbim", 1e-3),
+        "fit_epochs": kwargs.pop("fit_epochs", 4),
+        "scale": kwargs.pop("scale", 1.0),
+    }
+    base = E3BIDM(n_envs=n_envs, obs_dim=obs_dim, n_actions=n_actions,
+                  device=device, **kwargs)
+    return PBIM(base, gamma=gamma, device=device, **pbim_keys)

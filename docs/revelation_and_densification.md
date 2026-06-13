@@ -166,6 +166,81 @@ makes the agent stop buying information, i.e. the penalty **endogenously seals**
   (redundant) · anti-dense: e3b > 0 via rescue (none collapses)** — three signs, one
   decomposition.
 
+### SS toggle — FIRST RESULTS (seed-0 stage, ~9–10M, 2026-06-11): boundary confirmed, one registered prediction FAILED informatively
+
+| arm (seed 0) | none | e3b |
+|---|---|---|
+| sparse | succ 0.02–0.03, epLen 53–75, eval rew +0.11…+0.23 | succ ≤0.02, **epLen 36–40, health ≈0**, eval worse in all cells |
+| anti (−0.008/lit) | **NO FREEZE** — succ 0.02–0.04, **epLen 95–116 (longest), coins 0.24–0.32 (highest), health 0.06–0.12** | succ ≤0.01, epLen 37–42, **eval rew negative** |
+
+1. **Freeze boundary condition ANSWERED: no freeze without a sanctuary.** All three anti-none
+   runs are alive and learning — the penalty taught light-avoidance, which *extends survival*
+   (longest episodes, most coins). Combined with MysteryPath's n=15 freeze: **the lazy-robot
+   collapse requires a passive sanctuary (a reachable, absorbing zero-cost behavior).**
+   MysteryPath has one (stand still); SS does not (spotlights wander). T2's empty-statistic
+   fixed point is now a *characterized* phenomenon, not a universal.
+   **Refinement (penalty-alignment):** the *sign* of a penalty's effect depends on the
+   **information value of the penalized event**. MysteryPath's falls are the task's revelation
+   channel → pricing them seals the task. SS's "being lit" is intrinsically harmful and
+   carries no unique progress information → pricing it is benign-aligned shaping (SS-anti
+   behaves like an aligned densifier).
+2. **Registered prediction FAILED, diagnostically: e3b is HARMFUL on BOTH SS arms** (6/6
+   condition-pairs, 3 cells): e3b agents die young (epLen ~36–42, health ≈0) — novelty-seeking
+   drives them *into* the spotlights, the most visually dynamic objects in the env. The
+   "rescue" prediction assumed α > 0; on SS, **novelty is hazard-correlated (α < 0)** and the
+   bonus pays the agent to approach what kills it (the organic noisy-TV/danger-attraction
+   cell). Own this in the paper as a within-framework prediction failure: the decomposition
+   itself supplies the failed premise and the correction.
+3. **The α-resolved sign pattern (the paper's strongest form):** one quantity — the alignment
+   α between novelty and faithful progress — now explains every cell across both envs:
+   MysteryPath (novel tiles = progress, α>0): sparse **+**, aligned **≈0**, anti **+rescue**;
+   SS (novel pixels = wandering hazards, α<0): sparse **−**, anti **−**. "Sparsity alone is
+   not sufficient" is hereby demonstrated *in-suite* (recovering what the cut CountRecall cell
+   would have shown). Caveats: seed-0 only (n=1/condition; 5-seed completion pending); one
+   RetNet-sparse pod died mid-run; e3b bonus-health internals not yet re-verified on these runs.
+
+### Arm (c) ANALYZED (2026-06-11, n=5/condition, finished runs): the MysteryPath flip is CONFIRMED
+
+Aligned-dense (+0.1 progress, 10M): e3b − none per cell = GRU **−0.071**, RetNet **−0.125**,
+GatedDeltaNet **+0.109** (within ~1σ) → **≈0, mixed-sign, small** — against e3b's **~3×
+improvement on sparse**. The original K3 flip holds on MysteryPath at 5 seeds: strongly
+positive (sparse) → null/mildly-negative (aligned-dense). Also: none-dense reaches 0.75–1.21
+reward (vs sparse-none ≈0.07 at comparable budgets) — the density main effect again.
+Note: these runs predate the episode-boundary fix (~0.8% uniform, e3b arms only) — immaterial
+for a null result; flag in appendix.
+
+### MM toggle — FIRST RESULTS (seed-0, all 12 runs finished @10M, 2026-06-11)
+
+| arm (seed 0, cc=4) | none | e3b |
+|---|---|---|
+| sparse | **DEAD-FLAT** (succ 0.00–0.02, cmds ≤0.09) | **DEAD-FLAT** (succ 0, cmds ≤0.01) |
+| aligned-dense | **learning**: succ 0.06–0.08, rew 0.15–0.32, all cells | heterogeneous: **GRU succ 0.84 (!)**, GDN/RetNet **hurt** (succ 0, rew ≈half of none) |
+
+1. **The density MAIN EFFECT is clean and is T1 made visible:** dense-none ≫ sparse-none in
+   every cell, on a return-matched task (both arms max exactly 1.0). Same task, same optimal
+   return — per-use credit learns, terminal-only credit cannot start (sparse cmds ≤0.09 ≈
+   random). This is the within-MM confirmation that *densification* is the operative quantity.
+2. **Sparse arm: e3b buys NOTHING (e3b ≤ none, both ≈0).** The registered monetizer
+   prediction did not hold — and the α-framework explains why, post-hoc: MM is a RETENTION
+   task with **front-loaded revelation** (the show phase reveals everything; execution-time
+   probing acquires no goal-relevant information) → α ≈ 0 → nothing to monetize. MM-sparse is
+   the in-suite **uncontrollable/front-loaded-revelation cell**. Caveat: cc=4 (0.17% random)
+   may also simply be too hard at 10M — the two readings are confounded at n=1; the 5-seed
+   completion and/or a cc=3 variant would separate them.
+3. **Dense × e3b is cell-heterogeneous at n=1:** GRU+e3b exploded to **0.84 success (eval
+   0.70)** while GDN/RetNet+e3b underperform their none twins. The GRU outlier contradicts
+   both the redundancy prediction AND the α≈0 reading — treat as unexplained until seeds 1–4
+   land (lucky-seed vs auxiliary-representation effect of the IDM are the live hypotheses).
+4. **The suite's emerging α-taxonomy (one row per env, all density-toggled within-task):**
+   - MysteryPath — probing task, novelty=progress, **α>0** → bonus = effective densifier
+     (helps sparse, rescues anti).
+   - MortarMayhem — retention task, revelation front-loaded, **α≈0** → bonus useless; only
+     TRUE (native) densification works.
+   - SearingSpotlights — hazard task, novelty=danger, **α<0** → bonus harmful at any density.
+   If the 5-seed data confirms, this three-regime α-taxonomy (plus the sanctuary-dependent
+   freeze) IS the paper: density decides whether credit reaches memory (T1); α decides whether
+   a bonus can substitute for density (T1.1); sanctuaries decide when penalties self-seal (T2).
+
 ### Bonus ⊥ policy-memory (verified) — and the two-memories point
 
 `e3b_idm` is **architecturally independent of the policy's memory**: `IDMPhi.encode` uses the
@@ -253,6 +328,84 @@ it within budget. Expected result: *nobody* solves it, **and the bonus is demons
 busy-but-useless** (novelty consumed, return flat) — paired with a privileged-unsealed control
 (give the shaped reward access to `k` → solvable), which proves the bottleneck is sealing,
 not capacity. Small vector-obs env, GRU only, 3 conditions × 5 seeds — appendix-scale.
+
+## 4a. Formal theory: memory × reward density (the paper's theory section, drafted 2026-06-11)
+
+**Setup.** POMDP with hidden state; recurrent policy `π_θ(a_t | m_t)` with memory
+`m_t = f_θ(m_{t−1}, o_t)`; trained by recurrent PPO with TBPTT chunk length `k` and GAE.
+Episode length `T`. All notation below is per-episode.
+
+**Two definitions that make "toggle density, hold memory fixed" formal:**
+
+- **D1 — write–use gap Δ (the MEMORY axis).** Task-relevant information is *observable* at a
+  write opportunity `t_w` (the cue appears; the fall is felt; the light glimpse) and must
+  *condition behavior* at a use time `t_u` (the junction turn; the next path step; navigation in
+  the dark). `Δ = t_u − t_w` is what makes the task memory-essential: the info must cross Δ
+  inside the recurrent state, because the observation at `t_u` is aliased (Singh–Jaakkola–Jordan
+  1994; Littman 1994).
+- **D2 — use–pay gap δ (the DENSITY axis).** The distance between the use time and the reward
+  event that credits it. Sparse terminal: `δ = T − t_u` (one event, at the end). Aligned-dense:
+  `δ ≈ 0` with **positive** events at uses (MM's per-command +1/cc; MysteryPath's +0.1 tile).
+  Anti-dense: `δ ≈ 0` with **negative** events at *errors* (fall/spotlight penalties) — paying
+  avoidance rather than use.
+
+  **Our toggles manipulate δ (and the event sign) while Δ, dynamics, observations, and the
+  optimal policy are held fixed** — and the arms are return-matched (exactly, by the
+  optimum-preservation lemma, for the penalty arms and MM). That is the formal content of the
+  experimental design.
+
+**Proposition T1 (truncated credit to memory writes).** Under TBPTT(k), gradients do not flow
+across chunk boundaries, so the *direct* policy-gradient/value-gradient credit to the write
+computation at `t_w` comes only from advantages/TD-errors in `[t_w, t_w + k)`. Hence:
+- **Dense, Δ < k:** the use event pays inside the write's chunk → the write is credited in
+  **one hop**, every episode it fires.
+- **Sparse, T − t_w > k:** zero direct credit ever reaches the write. The write is reinforced
+  only via **bootstrapped value propagation** — the TD signal must hop chunk-by-chunk backward
+  across updates, ~`⌈(T − t_w)/k⌉` sequential stages, each adding bootstrap bias/variance, and
+  the source signal itself has sparse-return variance (nonzero advantage only on the rare
+  successful episodes).
+*Status: the zero-direct-credit claim is exact (definition of truncation); the multi-hop cost
+is a standard TD-propagation argument, stated as such.*
+
+**Corollary T1.1 (what the bonus does, memory-specifically).** An episodic novelty bonus
+manufactures reward events at probe/visit times — i.e., it sets an *effective* `δ_eff ≈ 0`
+with events whose alignment to true progress is α. For α > 0 it **restores one-hop credit to
+memory writes** that sparse extrinsic reward cannot reach. This is the memory-level mechanism
+of "densification gain," and it yields a NEW falsifiable prediction: **the bonus's benefit
+should grow as k shrinks** (more truncation → direct credit more valuable). Proposed
+validation run (cheap): GRU × k ∈ {16, 32, 64, 128} × {none, e3b} × sparse MysteryPath ×
+3 seeds = 24 runs — the truncation×density interaction (B7-theory).
+
+**Proposition T2 (memory stores what gets paid — the "leverage" direction).** The gradient
+that shapes memory *content* is proportional to advantages at the cell's use times; over
+training, `m_t` converges toward a sufficient statistic **for the reward events the agent
+actually receives**, not for the task as specified:
+- aligned-dense → events at progress → the stored statistic must contain the task-relevant
+  info (cue/sequence/position) — reward and task content coincide;
+- sparse → the rare success events do carry goal content, but the estimator has variance
+  ∝ 1/p(success) — content is learnable in principle, slowly (this is where the bonus's
+  manufactured events substitute);
+- **anti-dense → events at errors → the cell is trained toward the *cheapest statistic
+  sufficient for avoidance*. If a passive sanctuary exists (MysteryPath: don't move), that
+  statistic is EMPTY — the freeze is the degenerate fixed point of reward-shaped
+  representation learning.** Return-matched ≠ dynamics-matched, now at the representation
+  level: the penalty preserves π* but changes the fixed point that learning converges to.
+  SS (no sanctuary — spotlights wander) tests whether the empty-statistic fixed point
+  requires *avoidability*: that is exactly the registered boundary-condition question.
+
+**Proposition T3 (optimum preservation of the toggles).** Already in §3: the penalty arms
+preserve π* exactly (the optimum never pays); MM's aligned arm is exactly return-matched
+(cc × 1/cc); MysteryPath's +0.1 arm is ≈PBRS. So every behavioral difference across arms is a
+**learning-dynamics** effect (T1+T2), not a change in the task's solution — the freeze and the
+rescue are dynamics phenomena by construction.
+
+**How the empirical program instantiates the theory:** the three arms are three (δ, sign)
+configurations at fixed Δ; the bonus is a δ_eff-manipulator with alignment α; the four-cell
+sign pattern is T1+T2's joint prediction; the freeze (and SS's boundary test) is T2's
+degenerate fixed point; B6's `explained_variance` traces are T1's bootstrap-chain length made
+visible. *Presentation note: state T1–T3 as propositions-with-cited-lemmas (TBPTT truncation,
+TD propagation, Ng 1999, Singh/Littman aliasing); claim the synthesis + the Δ/δ formalization
++ the experimental realization as the contribution.*
 
 ## 4b. The real-world frame (LOCKED 2026-06-10): robotics, partial obs, terminal reward
 

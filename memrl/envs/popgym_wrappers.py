@@ -222,6 +222,56 @@ class DeferredReward(gym.Wrapper):
         return obs, 0.0, terminated, truncated, info
 
 
+class ExposeActionCoordsInObs(gym.ObservationWrapper):
+    """Append the last MultiDiscrete action (normalized) to a scalar/Discrete obs.
+
+    POPGym grid-search tasks (Battleship, MineSweeper) return only a hit/miss or
+    neighbor-count scalar — the FIRED CELL is the action, not the obs. An episodic
+    novelty bonus (E3B) computed from obs alone therefore can't tell cells apart
+    (the obs-richness confound that starves the ellipsoid). Appending the fired
+    coordinates makes φ position-aware, so episodic novelty = "probe a new cell" =
+    progress (α>0) on a recoverable-probing task like Battleship.
+
+    New obs = [onehot(original_discrete_obs) ‖ action_0/(n_0−1), …]. On reset the
+    action part is 0. Requires Discrete obs + MultiDiscrete action.
+    """
+
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        assert isinstance(env.observation_space, gym.spaces.Discrete), \
+            "ExposeActionCoordsInObs needs a Discrete obs"
+        assert isinstance(env.action_space, gym.spaces.MultiDiscrete), \
+            "ExposeActionCoordsInObs needs a MultiDiscrete action"
+        self._n_obs = int(env.observation_space.n)
+        self._nvec = [int(x) for x in env.action_space.nvec]
+        dim = self._n_obs + len(self._nvec)
+        self.observation_space = gym.spaces.Box(0.0, 1.0, shape=(dim,), dtype=np.float32)
+        self._last_action = np.zeros(len(self._nvec), dtype=np.float32)
+
+    def _encode(self, obs_scalar) -> np.ndarray:
+        o = np.zeros(self.observation_space.shape, dtype=np.float32)
+        o[int(obs_scalar)] = 1.0
+        o[self._n_obs:] = self._last_action
+        return o
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        self._last_action = np.zeros(len(self._nvec), dtype=np.float32)
+        return self._encode(obs), info
+
+    def step(self, action):
+        a = np.asarray(action).reshape(-1)
+        self._last_action = np.array(
+            [a[i] / max(1, self._nvec[i] - 1) for i in range(len(self._nvec))],
+            dtype=np.float32,
+        )
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        return self._encode(obs), reward, terminated, truncated, info
+
+    def observation(self, observation):   # unused (we override step/reset) but required
+        return self._encode(observation)
+
+
 _PHASE_ENV_PREFIXES = ("popgym-Autoencode",)
 
 
@@ -249,6 +299,9 @@ def make_popgym_vec_env(
     n_envs: int = 8,
     seed: int = 0,
     defer_reward: bool = False,
+    autoencode_density: str | None = None,
+    autoencode_order: str = "reverse",
+    expose_action_coords: bool = False,
 ) -> VecEnv:
     """Build a vectorized POPGym environment.
 
@@ -269,16 +322,43 @@ def make_popgym_vec_env(
         defer_reward: if True, wrap with ``DeferredReward`` — all per-step
                   reward is withheld and paid as one terminal lump sum
                   (the SPARSE twin of the natively dense task).
+        autoencode_density: Autoencode density toggle (requires an
+                  ``popgym-Autoencode*`` env). ``"dense"`` applies the
+                  MortarMayhem rule (+1/N correct, 0+terminate on wrong);
+                  ``"sparse"`` is the same rule deferred to a terminal lump sum
+                  (exactly return-matched at γ=1; pure δ-toggle). ``None`` keeps
+                  stock behavior. Mutually exclusive with ``defer_reward``.
+        autoencode_order: ``"reverse"`` (stock LIFO) or ``"inorder"`` (FIFO).
 
     Returns:
         Vectorized environment ready to pass to MemPPO.
     """
+    if autoencode_density is not None:
+        if autoencode_density not in ("sparse", "dense"):
+            raise ValueError("autoencode_density must be 'sparse', 'dense', or None")
+        if not env_name.startswith("popgym-Autoencode"):
+            raise ValueError("autoencode_density requires a popgym-Autoencode* env")
+        if defer_reward:
+            raise ValueError("autoencode_density already controls reward timing; "
+                             "do not combine with defer_reward")
+
     def _make_one(rank: int):
         def _init():
             # SubprocVecEnv on Windows uses 'spawn' — popgym registration
             # doesn't survive across the fork, so re-import in the worker.
             import popgym  # noqa: F401
             env = gym.make(env_name)
+            # Battleship/MineSweeper α>0 probing: expose the fired cell so the
+            # episodic bonus's φ is position-aware (novelty = probe new cell).
+            # Sits on the RAW env (Discrete obs + MultiDiscrete action) first.
+            if expose_action_coords:
+                env = ExposeActionCoordsInObs(env)
+            # Autoencode density toggle sits on the RAW env (reads tuple obs),
+            # before phase/flatten. DENSE = toggle only; SPARSE = toggle then
+            # DeferredReward (same return, paid as a terminal lump sum).
+            if autoencode_density is not None:
+                from .autoencode_toggle import AutoencodeDensityToggle
+                env = AutoencodeDensityToggle(env, order=autoencode_order)
             # Expose phase flag in info BEFORE obs-flattening (Autoencode etc.).
             if any(env_name.startswith(p) for p in _PHASE_ENV_PREFIXES):
                 env = ExposePhaseInInfo(env, phase_index=0)
@@ -287,7 +367,7 @@ def make_popgym_vec_env(
                 env = FlattenTupleDiscrete(env)
             elif isinstance(env.observation_space, gym.spaces.MultiDiscrete):
                 env = FlattenMultiDiscrete(env)
-            if defer_reward:
+            if defer_reward or autoencode_density == "sparse":
                 env = DeferredReward(env)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)

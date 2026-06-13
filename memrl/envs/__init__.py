@@ -37,6 +37,9 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
         return make_popgym_arcade_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("popgym-"):
         return make_popgym_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
+    if env_name.startswith("TinyReproduce"):
+        from .tiny_reproduce import make_tiny_reproduce_vec_env
+        return make_tiny_reproduce_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("MiniGrid-"):
         return make_minigrid_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("TMaze-"):

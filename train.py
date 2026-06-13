@@ -98,6 +98,7 @@ from memrl.exploration import make_intrinsic
 from memrl.ppo import MemPPO
 from memrl.utils import (
     ResumableCheckpointCallback,
+    SnapshotCallback,
     apply_perf_defaults,
     load_checkpoint,
     maybe_compile_policy,
@@ -205,6 +206,22 @@ def _n_actions(env) -> int:
     return 0    # continuous — ICM not supported
 
 
+def _action_dims(env) -> list[int]:
+    """Per-sub-action vocab sizes. Discrete → [n]; MultiDiscrete → list(nvec).
+
+    Used by the IDM-based E3B/PBIM modules to build a multi-head inverse model
+    (one softmax per sub-action), so MultiDiscrete spaces (e.g. SearingSpotlights
+    MultiDiscrete([3,3])) train correctly rather than crashing on a scalar reshape.
+    """
+    import gymnasium as gym
+    sp = env.action_space
+    if isinstance(sp, gym.spaces.Discrete):
+        return [int(sp.n)]
+    if isinstance(sp, gym.spaces.MultiDiscrete):
+        return [int(x) for x in sp.nvec]
+    return []
+
+
 def _build_intrinsic_module(cfg: dict, env):
     """Instantiate the configured exploration module.
 
@@ -218,6 +235,12 @@ def _build_intrinsic_module(cfg: dict, env):
     if name in (None, "none", "None"):
         return None
     kwargs = dict(cfg.get("intrinsic_kwargs", {}))
+    # IDM-based E3B/PBIM use a multi-head inverse model; pass per-dim action sizes
+    # so MultiDiscrete action spaces train correctly.
+    if name in ("e3b_idm", "pbim_e3b_idm") and "action_dims" not in kwargs:
+        kwargs["action_dims"] = _action_dims(env)
+    if name == "pbim_e3b_idm" and "gamma" not in kwargs:
+        kwargs["gamma"] = cfg.get("gamma", 0.99)   # PBIM telescoping must match PPO γ
     return make_intrinsic(
         name,
         n_envs=cfg["n_envs"],
@@ -265,15 +288,22 @@ def _maybe_init_wandb(cfg: dict, run_dir: Path, enabled: bool,
     run_name = cfg.get("run_name")
     display_name = f"{run_name}-seed{seed}" if run_name else f"{cell}-{intrinsic}-seed{seed}"
     run_id = re.sub(r"[^A-Za-z0-9_.-]", "-", f"{run_name or cell}-{run_dir.name}")[:120]
+    # wandb hierarchy: project = env, group = reward type, job_type = bonus type,
+    # cell = config.meta.memory_cell (group-by in UI) + tag. Generators set
+    # wandb_group / wandb_job_type / wandb_tags; fall back to the old scheme
+    # (group=env, job_type=cell) so other experiments are unaffected.
+    group = cfg.get("wandb_group", env_name)
+    job_type = cfg.get("wandb_job_type", cell)
+    tags = cfg.get("wandb_tags") or [cell, intrinsic, env_name]
     run = wandb.init(
         project=project,
         entity=entity,
         name=display_name,
         id=run_id,
         resume="allow",
-        group=env_name,                 # all cells on an env grouped together
-        job_type=cell,
-        tags=[cell, intrinsic, env_name],
+        group=group,                    # reward type (sparse / penalty / aligned / dense)
+        job_type=job_type,              # bonus type (none / e3b_idm / pbim_e3b_idm)
+        tags=tags,
         config=cfg,
         sync_tensorboard=True,          # ← mirrors every SB3/MemPPO TB scalar
         dir=str(run_dir),
@@ -420,6 +450,16 @@ def main() -> int:
         "--wandb-entity", default=None,
         help="wandb entity/team (default: config 'wandb_entity', else your "
              "wandb default entity)",
+    )
+    parser.add_argument(
+        "--snapshot-steps", default=None,
+        help="comma-separated env-step milestones at which to write immutable "
+             "policy snapshots for the decodability probe, e.g. "
+             "'500000,2000000,5000000,10000000'. Off by default.",
+    )
+    parser.add_argument(
+        "--snapshot-to-wandb", action="store_true",
+        help="log each milestone snapshot as a wandb artifact (requires --wandb).",
     )
     args = parser.parse_args()
 
@@ -583,7 +623,23 @@ def main() -> int:
         verbose=1,
     )
 
-    callbacks = CallbackList([eval_cb, ckpt_cb, EpisodeInfoCallback()])
+    cb_list = [eval_cb, ckpt_cb, EpisodeInfoCallback()]
+
+    # Optional immutable snapshots at fixed milestones (for the decodability
+    # probe). Off by default; --snapshot-steps "500000,2000000,5000000,10000000"
+    # enables it. With --snapshot-to-wandb each snapshot is logged as an artifact.
+    if args.snapshot_steps:
+        milestones = [int(s) for s in args.snapshot_steps.split(",") if s.strip()]
+        snap_cb = SnapshotCallback(
+            save_path=run_dir,
+            milestones=milestones,
+            config=cfg,
+            wandb_run=wandb_run if args.snapshot_to_wandb else None,
+            verbose=1,
+        )
+        cb_list.append(snap_cb)
+
+    callbacks = CallbackList(cb_list)
 
     if resume:
         loaded_steps = load_checkpoint(run_dir, model)

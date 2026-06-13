@@ -8,7 +8,7 @@ branching.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -128,6 +128,7 @@ class E3BIDM(E3B):
         lambda_reg: float = 1.0,
         max_bonus: float = 10.0,
         normalize: bool = True,
+        action_dims: Sequence[int] | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
         phi = IDMPhi(obs_dim=obs_dim, hidden=hidden_dim,
@@ -138,13 +139,19 @@ class E3BIDM(E3B):
         )
         self.obs_dim = obs_dim
         self.n_actions = int(n_actions)
+        # action_dims: per-sub-action vocab sizes. Discrete → [n]; MultiDiscrete →
+        # list(nvec). The IDM is a MULTI-HEAD inverse model (one softmax per
+        # sub-action) so MultiDiscrete spaces (e.g. SearingSpotlights
+        # MultiDiscrete([3,3])) train instead of crashing on the old scalar
+        # `act.reshape(T, B)`. Falls back to single-head when action_dims is None.
+        self.action_dims = [int(d) for d in action_dims] if action_dims else [int(n_actions)]
         self.feature_dim = feature_dim
         self.idm_epochs = int(idm_epochs)
         self.idm_batch = int(idm_batch)
-        # Inverse-dynamics head: (φ_t, φ_{t+1}) → action logits.
+        # Inverse-dynamics head: (φ_t, φ_{t+1}) → concatenated per-dim logits.
         self.idm = nn.Sequential(
             nn.Linear(feature_dim * 2, hidden_dim), nn.ReLU(),
-            nn.Linear(hidden_dim, self.n_actions),
+            nn.Linear(hidden_dim, int(sum(self.action_dims))),
         ).to(self.device)
         for m in self.idm:
             if isinstance(m, nn.Linear):
@@ -169,10 +176,12 @@ class E3BIDM(E3B):
         if obs.ndim < 2 or obs.shape[0] < 2:
             return {}
         T, B = obs.shape[0], obs.shape[1]
+        K = len(self.action_dims)            # 1 for Discrete, >1 for MultiDiscrete
         obs_f = obs.reshape(T, B, -1)
         s   = obs_f[:-1].reshape(-1, self.obs_dim)
         s2  = obs_f[1:].reshape(-1, self.obs_dim)
-        a   = act.reshape(T, B)[:-1].reshape(-1)
+        # actions: (T, B) for Discrete or (T, B, K) for MultiDiscrete → (N, K)
+        a   = act.reshape(T, B, K)[:-1].reshape(-1, K)
 
         eps = getattr(rollout, "episode_starts", None)
         if eps is not None:
@@ -186,7 +195,8 @@ class E3BIDM(E3B):
 
         s_t  = torch.as_tensor(s,  dtype=torch.float32, device=self.device)
         s2_t = torch.as_tensor(s2, dtype=torch.float32, device=self.device)
-        a_t  = torch.as_tensor(a,  dtype=torch.long,    device=self.device)
+        a_t  = torch.as_tensor(a,  dtype=torch.long,    device=self.device)  # (N, K)
+        splits = list(self.action_dims)
 
         last_loss, last_acc = 0.0, 0.0
         for _ in range(max(1, self.idm_epochs)):
@@ -195,13 +205,16 @@ class E3BIDM(E3B):
                 idx = perm[i:i + self.idm_batch]
                 phi_s  = self.phi(s_t[idx])           # grad path (IDMPhi.forward)
                 phi_s2 = self.phi(s2_t[idx])
-                logits = self.idm(torch.cat([phi_s, phi_s2], dim=-1))
-                loss = F.cross_entropy(logits, a_t[idx])
+                logits = self.idm(torch.cat([phi_s, phi_s2], dim=-1))  # (b, sum(dims))
+                # Multi-head CE: one softmax per sub-action, summed (mean over heads).
+                chunks = torch.split(logits, splits, dim=-1)
+                loss = sum(F.cross_entropy(chunks[j], a_t[idx, j]) for j in range(K)) / K
                 self.opt.zero_grad()
                 loss.backward()
                 self.opt.step()
                 last_loss = float(loss.item())
-                last_acc = float((logits.argmax(-1) == a_t[idx]).float().mean())
+                accs = [(chunks[j].argmax(-1) == a_t[idx, j]).float().mean() for j in range(K)]
+                last_acc = float(torch.stack(accs).mean())
         return {
             "e3b_idm_loss": last_loss,
             "e3b_idm_acc":  last_acc,

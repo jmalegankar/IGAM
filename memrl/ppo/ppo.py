@@ -311,6 +311,18 @@ class MemPPO(PPO):
                     side=side,
                     cell_state=self._cell_state,
                 )                                                             # (n_envs,) np.float32
+                # Done-step misattribution fix: on a done step VecEnv has already
+                # auto-reset, so new_obs[i] is the NEXT episode's first obs and the
+                # episodic module was just reset → bonus[i] is a fresh-ellipsoid
+                # (≈max) bonus for a DIFFERENT episode. Adding it to THIS episode's
+                # terminal reward is an arm-asymmetric artifact (it rewards episode
+                # termination — e.g. *dying* in SearingSpotlights, confounding the
+                # α<0 result). Zero the bonus on terminated envs so the terminal
+                # transition carries extrinsic reward only. Costs the e3b arm one
+                # step's bonus per episode — symmetric and negligible.
+                if np.any(dones):
+                    bonus = np.asarray(bonus, dtype=np.float32).copy()
+                    bonus[np.asarray(dones, dtype=bool)] = 0.0
                 rewards = rewards.astype(np.float32) + self.lambda_intrinsic * bonus
                 # Lightweight log (per-rollout mean below).
                 if not hasattr(self, "_intrinsic_buf"):
