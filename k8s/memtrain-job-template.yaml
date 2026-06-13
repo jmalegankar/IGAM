@@ -3,7 +3,7 @@
 # launch script. The registry now emits ONE script per run (one intrinsic), so a
 # Job runs exactly one `python -m train` — no intrinsic-packing, no OOM risk, and
 # bonus-vs-none stays fair because seeds are matched across Jobs.
-# Only __JOBNAME__ and __SCRIPT__ are placeholders.
+# The launcher substitutes the job name and the bash command path.
 #
 # Prereqs: image rebuilt at the CURRENT git ref (new envs: tiny_reproduce,
 # autoencode_toggle, ExposeActionCoordsInObs; pbim; SnapshotCallback; E3B

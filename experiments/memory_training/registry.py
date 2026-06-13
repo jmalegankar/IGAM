@@ -242,8 +242,10 @@ def _emit_grid(eid, env_name, project, cells, intrinsics, densities, seeds, budg
     cdir = HERE / "configs" / subdir; sdir = HERE / "scripts" / subdir
     cdir.mkdir(parents=True, exist_ok=True); sdir.mkdir(parents=True, exist_ok=True)
     snap = SNAP + (",20000000" if budget >= 20_000_000 else "")
-    depth = subdir.count("/") + 2                     # scripts/<subdir>/ → repo
-    up = "/".join([".."] * (depth + 1))
+    # HERE = experiments/memory_training/scripts/<subdir>. cfglvl/loglvl reach
+    # memory_training (depth ups); REPO_ROOT is two more (…/experiments/repo).
+    depth = subdir.count("/") + 2                     # HERE → memory_training
+    up = "/".join([".."] * (depth + 2))               # HERE → repo root
     cfglvl = "/".join([".."] * depth)
     loglvl = "/".join([".."] * depth)
     ncfg = nsh = 0
@@ -255,7 +257,9 @@ def _emit_grid(eid, env_name, project, cells, intrinsics, densities, seeds, budg
                                         eid, env_tag), f, sort_keys=False)
                 ncfg += 1
                 for seed in seeds:
-                    p = sdir / f"{eid}_s{seed}_{cell}_{dens.label}_{intr}.sh"
+                    # filename has NO eid prefix — the dir (scripts/<eid>/…) already
+                    # encodes it; this keeps k8s jobnames short (<63) and dedup'd.
+                    p = sdir / f"s{seed}_{cell}_{dens.label}_{intr}.sh"
                     p.write_text(_SCRIPT.format(eid=eid, cell=cell, dens=dens.label,
                                  intr=intr, seed=seed, snap=snap, up=up,
                                  cfglvl=cfglvl, loglvl=loglvl, subdir=subdir))

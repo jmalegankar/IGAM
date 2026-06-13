@@ -10,16 +10,16 @@
 # Select what to launch:
 #   EID    experiment id (default E1)                  e.g. EID=E3
 #   ENV    core env-slice filter (E1 only)             e.g. ENV=MysteryPath
-#   ONLY   regex on the script basename (stage waves)  e.g. ONLY='_s0_'  (seed-0 wave)
+#   ONLY   regex on the script basename (stage waves)  e.g. ONLY='s0_'  (seed-0 wave)
 #   DRY_RUN=1  print manifests, apply nothing
 #
 # Examples:
 #   DRY_RUN=1 k8s/launch-memtrain-jobs.sh                       # preview ALL of E1 (910)
-#   ENV=MysteryPath ONLY='_s0_' k8s/launch-memtrain-jobs.sh     # E1 MysteryPath seed-0 wave
+#   ENV=MysteryPath ONLY='s0_' k8s/launch-memtrain-jobs.sh     # E1 MysteryPath seed-0 wave
 #   ENV=MysteryPath k8s/launch-memtrain-jobs.sh                 # E1 MysteryPath (all seeds)
 #   EID=E3 k8s/launch-memtrain-jobs.sh                          # the λ-sweep
 #
-# Stage safely: DRY_RUN=1 first → ONLY='_s0_' (one seed wave) → inspect wandb → rest.
+# Stage safely: DRY_RUN=1 first → ONLY='s0_' (one seed wave) → inspect wandb → rest.
 #
 # Watch / clean up:
 #   kubectl get jobs -l app=memrl-memtrain
