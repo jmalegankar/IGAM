@@ -162,6 +162,25 @@ class PBIM(IntrinsicRewardModule):
         self._raw_b.append(raw_b)
         self._boundary.append(np.asarray(episode_start, dtype=bool))
 
+        # 4b) telescoping / return-neutrality check: the DISCOUNTED per-episode
+        #     shaping sum Σ_t γ^t F_t. For a true potential this telescopes to
+        #     γ^T Φ(s_T) − Φ(s_0) — endpoint-only, so it must stay SMALL and
+        #     BOUNDED, not grow with episode return/length. A large/return-
+        #     correlated value ⇒ the "potential" is not telescoping (the
+        #     shaping-instability the P5 caveat warns about).
+        es_arr = np.asarray(episode_start, dtype=bool)
+        if getattr(self, "_disc_sum", None) is None or self._disc_sum.shape != F_np.shape:
+            self._disc_sum = np.zeros_like(F_np)
+            self._gamma_pow = np.ones_like(F_np)
+            self._ep_F_buf: list[float] = []
+        for i in range(F_np.shape[0]):
+            if es_arr[i]:                                  # previous episode ended
+                self._ep_F_buf.append(float(self._disc_sum[i]))
+                self._disc_sum[i] = 0.0
+                self._gamma_pow[i] = 1.0
+        self._disc_sum += self._gamma_pow * F_np           # F_np is 0 at resets
+        self._gamma_pow *= self.gamma
+
         self._record_bonus(F_np)  # diagnostics track the SHAPED term
         return F_np
 
@@ -219,6 +238,17 @@ class PBIM(IntrinsicRewardModule):
     def diagnostics(self) -> dict[str, float]:
         base = super().diagnostics()  # shaped-term mean/max/std
         base.update(self._last_diag)
+        # Telescoping check: mean / |mean| / std of the discounted per-episode
+        # shaping sum over episodes that ENDED this rollout. Near-zero & stable
+        # ⇒ return-neutral (true potential); large/growing ⇒ instability.
+        buf = getattr(self, "_ep_F_buf", None)
+        if buf:
+            arr = np.asarray(buf, dtype=np.float32)
+            base["pbim_ep_shaping_disc_sum_mean"] = float(arr.mean())
+            base["pbim_ep_shaping_disc_sum_absmean"] = float(np.abs(arr).mean())
+            base["pbim_ep_shaping_disc_sum_std"] = float(arr.std())
+            base["pbim_ep_shaping_n"] = float(len(arr))
+            self._ep_F_buf = []
         return base
 
 

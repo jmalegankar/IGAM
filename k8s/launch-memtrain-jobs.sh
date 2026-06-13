@@ -35,7 +35,7 @@ TEMPLATE="$HERE/memtrain-job-template.yaml"
 SCRIPTS_REL="experiments/memory_training/scripts"
 JOB_PREFIX="memrl"
 EID="${EID:-E1}"
-PACK="${PACK:-1}"
+PACK="${PACK:-2}"                                   # runs per Job/GPU (default 2)
 CPU_PER=5; MEM_PER=20                               # per-run requests; scale by PACK
 
 [[ -f "$TEMPLATE" ]] || { echo "missing template: $TEMPLATE" >&2; exit 1; }
