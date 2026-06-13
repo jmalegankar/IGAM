@@ -36,6 +36,16 @@ spec:
                 secretKeyRef:
                   name: wandb
                   key: api-key
+            # wandb-resilience under cluster load (no image rebuild needed): the
+            # default sync_tensorboard path + console capture + frequent system
+            # stats starved the sync process under contention → mass heartbeat
+            # loss (runs marked "crashed" while GPUs kept training). These cut the
+            # sync workload and widen the connect/heartbeat tolerances.
+            - { name: WANDB_CONSOLE, value: "off" }                  # don't stream stdout (tee'd to file anyway)
+            - { name: WANDB__SERVICE_WAIT, value: "300" }            # tolerate slow service start
+            - { name: WANDB_INIT_TIMEOUT, value: "120" }             # tolerate slow init under burst
+            - { name: WANDB_HTTP_TIMEOUT, value: "60" }
+            - { name: WANDB_X_STATS_SAMPLING_INTERVAL, value: "30" } # system stats every 30s, not 2s
           resources:
             limits:
               nvidia.com/gpu: 1            # PACK runs SHARE this one GPU
