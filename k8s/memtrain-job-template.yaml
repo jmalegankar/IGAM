@@ -2,8 +2,10 @@
 # Substituted by k8s/launch-memtrain-jobs.sh. With PACK=1 (default) one Job runs
 # one `python -m train` on one GPU — no OOM risk, fair (seeds matched across Jobs).
 # With PACK=N the launcher fills __COMMAND__ to run N already-emitted run-scripts
-# in parallel on the one GPU (they share the device); __CPU__/__MEM__ scale with N.
-# Placeholders: __JOBNAME__ __COMMAND__ __CPU__ __MEM__.
+# in parallel on the one GPU (they share the device).
+# Placeholders (launcher-filled): __JOBNAME__ __COMMAND__.
+# Resources are SET BY HAND below — edit cpu/memory/gpu here; if you raise PACK,
+# raise cpu/memory to match (the launcher does NOT scale them).
 #
 # Prereqs: image rebuilt at the CURRENT git ref (new envs: tiny_reproduce,
 # autoencode_toggle, ExposeActionCoordsInObs/_SuccessOnTerminated; pbim;
@@ -46,16 +48,16 @@ spec:
             - { name: WANDB_INIT_TIMEOUT, value: "120" }             # tolerate slow init under burst
             - { name: WANDB_HTTP_TIMEOUT, value: "60" }
             - { name: WANDB_X_STATS_SAMPLING_INTERVAL, value: "300" } # system stats every 5 min (was 2s default)
+          # ── EDIT RESOURCES HERE (by hand) ─────────────────────────────────
+          # Tip: keep NO cpu limit — a cpu limit (CFS quota) throttles every
+          # thread at the cap, including wandb's heartbeat → the same starvation
+          # that marked runs "crashed". Leave cpu as a request only. If you raise
+          # PACK (runs/GPU), raise cpu + memory here to match.
           resources:
-            # NO cpu limit on purpose: a cpu limit (CFS quota) throttles ALL
-            # threads at the cap — including wandb's heartbeat thread — which is
-            # the same starvation that marked runs "crashed". Keep the cpu
-            # *request* (scheduling) only. memory limit == request → Guaranteed
-            # QoS (won't be evicted under node memory pressure on a 17h run).
             limits:
-              memory: __MEM__Gi
+              memory: 24Gi
               nvidia.com/gpu: 1            # PACK runs SHARE this one GPU
             requests:
-              cpu: "__CPU__"
-              memory: __MEM__Gi
+              cpu: "6"
+              memory: 20Gi
               nvidia.com/gpu: 1

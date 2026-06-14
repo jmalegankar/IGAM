@@ -38,7 +38,8 @@ EID="${EID:-E1}"
 PACK="${PACK:-2}"                                   # runs per Job/GPU. PACK=2 fills GPU idle
                                                     # (recurrent runs under-use the GPU); safe now
                                                     # that wandb is hardened + you stage in waves.
-CPU_PER=6; MEM_PER=20                               # per-run requests; scale by PACK (PACK=2 → 12cpu)
+                                                    # NOTE: cpu/memory are set BY HAND in the
+                                                    # template — if you raise PACK, raise them there.
 
 [[ -f "$TEMPLATE" ]] || { echo "missing template: $TEMPLATE" >&2; exit 1; }
 ROOT="$REPO_ROOT/$SCRIPTS_REL/$EID"
@@ -59,7 +60,6 @@ done < <(
 )
 [[ ${#FILES[@]} -gt 0 ]] || { echo "no scripts matched (EID=$EID ENV=${ENV:-*} ONLY=${ONLY:-*})"; exit 0; }
 
-cpu=$(( CPU_PER * PACK )); mem=$(( MEM_PER * PACK ))
 TEMPLATE_BODY="$(cat "$TEMPLATE")"
 jobs=0
 for ((i = 0; i < ${#FILES[@]}; i += PACK)); do
@@ -83,10 +83,9 @@ for ((i = 0; i < ${#FILES[@]}; i += PACK)); do
   fi
   # bash string replacement (NOT sed): cmd contains '&' which sed treats as the
   # matched text — bash ${//} replaces literally, so backgrounding survives.
+  # cpu/memory are NOT substituted — they're set by hand in the template.
   manifest="${TEMPLATE_BODY//__JOBNAME__/$jobname}"
   manifest="${manifest//__COMMAND__/$cmd}"
-  manifest="${manifest//__CPU__/$cpu}"
-  manifest="${manifest//__MEM__/$mem}"
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     printf '# %s (%d run/s) -> %s\n%s\n---\n' "$(basename "${chunk[0]}")" "${#chunk[@]}" "$jobname" "$manifest"
   else
@@ -95,4 +94,4 @@ for ((i = 0; i < ${#FILES[@]}; i += PACK)); do
   jobs=$((jobs + 1))
 done
 
-echo "Processed $jobs Jobs over ${#FILES[@]} runs (EID=$EID ENV=${ENV:-*} ONLY=${ONLY:-*} PACK=$PACK CPU=$cpu MEM=${mem}Gi DRY_RUN=${DRY_RUN:-0})."
+echo "Processed $jobs Jobs over ${#FILES[@]} runs (EID=$EID ENV=${ENV:-*} ONLY=${ONLY:-*} PACK=$PACK DRY_RUN=${DRY_RUN:-0}). [cpu/mem are hand-set in the template]"
