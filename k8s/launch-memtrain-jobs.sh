@@ -35,9 +35,10 @@ TEMPLATE="$HERE/memtrain-job-template.yaml"
 SCRIPTS_REL="experiments/memory_training/scripts"
 JOB_PREFIX="memrl"
 EID="${EID:-E1}"
-PACK="${PACK:-1}"                                   # runs per Job/GPU (1 = least wandb-sync
-                                                    # contention; PACK=2 caused mass heartbeat loss)
-CPU_PER=6; MEM_PER=20                               # per-run requests; scale by PACK
+PACK="${PACK:-2}"                                   # runs per Job/GPU. PACK=2 fills GPU idle
+                                                    # (recurrent runs under-use the GPU); safe now
+                                                    # that wandb is hardened + you stage in waves.
+CPU_PER=6; MEM_PER=20                               # per-run requests; scale by PACK (PACK=2 → 12cpu)
 
 [[ -f "$TEMPLATE" ]] || { echo "missing template: $TEMPLATE" >&2; exit 1; }
 ROOT="$REPO_ROOT/$SCRIPTS_REL/$EID"
