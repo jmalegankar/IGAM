@@ -45,7 +45,7 @@ spec:
             - { name: WANDB__SERVICE_WAIT, value: "300" }            # tolerate slow service start
             - { name: WANDB_INIT_TIMEOUT, value: "120" }             # tolerate slow init under burst
             - { name: WANDB_HTTP_TIMEOUT, value: "60" }
-            - { name: WANDB_X_STATS_SAMPLING_INTERVAL, value: "30" } # system stats every 30s, not 2s
+            - { name: WANDB_X_STATS_SAMPLING_INTERVAL, value: "300" } # system stats every 5 min (was 2s default)
           resources:
             limits:
               nvidia.com/gpu: 1            # PACK runs SHARE this one GPU
