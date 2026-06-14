@@ -47,8 +47,15 @@ spec:
             - { name: WANDB_HTTP_TIMEOUT, value: "60" }
             - { name: WANDB_X_STATS_SAMPLING_INTERVAL, value: "300" } # system stats every 5 min (was 2s default)
           resources:
+            # NO cpu limit on purpose: a cpu limit (CFS quota) throttles ALL
+            # threads at the cap — including wandb's heartbeat thread — which is
+            # the same starvation that marked runs "crashed". Keep the cpu
+            # *request* (scheduling) only. memory limit == request → Guaranteed
+            # QoS (won't be evicted under node memory pressure on a 17h run).
             limits:
+              memory: __MEM__Gi
               nvidia.com/gpu: 1            # PACK runs SHARE this one GPU
             requests:
               cpu: "__CPU__"
               memory: __MEM__Gi
+              nvidia.com/gpu: 1
