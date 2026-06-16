@@ -134,7 +134,7 @@ CORE = [
             Density("sparse", env_kwargs={"expose_action_coords": True, "defer_reward": True})],
            10_000_000,
            "α>0 probing (2nd positive env) → generalizes 'bonus helps' beyond MysteryPath"),
-    EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny", TINY3,
+    EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny", SIX,
            ["none", "e3b_idm"],
            [Density("sparse", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"}),
             Density("dense", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
