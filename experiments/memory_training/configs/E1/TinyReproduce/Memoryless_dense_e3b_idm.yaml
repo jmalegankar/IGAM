@@ -1,11 +1,11 @@
 env_name: TinyReproduce-v0
 env_kwargs:
-  k: 6
-  v: 2
+  k: 10
+  v: 4
   order: reverse
   density: dense
 n_envs: 16
-total_timesteps: 2000000
+total_timesteps: 10000000
 seed: 0
 cell:
   name: Memoryless

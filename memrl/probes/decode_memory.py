@@ -482,8 +482,16 @@ def main():
     # milestone → identical matched-coverage bank across arms.
     _, env, cfg = build_policy_from_snapshot(str(snaps[-1]), device=args.device)
     task = args.task
+    ekw = cfg.get("env_kwargs", {})
+    is_reproduce = (cfg["env_name"].startswith("popgym-Autoencode")
+                    or cfg["env_name"].startswith("TinyReproduce"))
     if task == "auto":
-        task = "autoencode" if cfg["env_name"].startswith("popgym-Autoencode") else "mysterypath"
+        task = "autoencode" if is_reproduce else "mysterypath"
+    # Auto-set vocab/length from the run config so the lag-Δ retention probe is
+    # right per env (TinyReproduce carries k,v; Autoencode is suits=4, len 52).
+    if task == "autoencode" and cfg["env_name"].startswith("TinyReproduce"):
+        if "--n-suits" not in sys.argv: args.n_suits = int(ekw.get("v", args.n_suits))
+        if "--max-pos" not in sys.argv: args.max_pos = int(ekw.get("k", args.max_pos))
 
     probes = ["linear", "mlp"] if args.probe == "both" else [args.probe]
     if task == "autoencode":
@@ -495,8 +503,13 @@ def main():
             for pk in probes:
                 res = decodability_autoencode(states, n_suits=args.n_suits,
                                               kind=pk, device=args.device)
+                # res["per_pos"] = [(relative-position, acc), ...] = the lag-Δ
+                # RETENTION curve: position r is "decode the token due r steps from
+                # now" — how well the memory RETAINS each held token. Decay with r
+                # (and e3b>none) = the bonus aids retention; flat = it doesn't.
                 print(json.dumps({"run": run.name, "step": step,
-                                  "metric": "decodability_autoencode", **res}))
+                                  "metric": "decodability_retention",
+                                  "lag_retention_curve": res.get("per_pos"), **res}))
         return
 
     bank = collect_bank(env, behavior=None, n_episodes=args.n_episodes,
