@@ -45,6 +45,12 @@ sys.path.insert(0, str(REPO))
 from train import DEFAULT_CELL_KWARGS  # noqa: E402
 
 SIX = ["GRU", "LSTM", "RetNet", "GatedDeltaNet", "Mamba2", "Memoryless"]
+# Full memory-cell zoo (the 11 published cells + Memoryless floor) — for the
+# cell × memory-type comparison on the embodied retention env (S13), where the
+# gated-RNN-vs-SSM recall inversion is most relevant. GTrXL carries a param
+# confound (report counts). Excludes branch/LMU variants + S4D.
+ZOO12 = ["GRU", "LSTM", "RetNet", "GatedDeltaNet", "Mamba2", "LRU", "FFM",
+         "LinearTransformer", "SHM", "mLSTM", "GTrXL", "Memoryless"]
 FOUR = ["GRU", "RetNet", "GatedDeltaNet", "Memoryless"]
 THREE_STRONG = ["GRU", "RetNet", "GatedDeltaNet"]
 TINY3 = ["GRU", "RetNet", "Memoryless"]
@@ -124,10 +130,11 @@ CORE = [
             Density("dense", env_kwargs={"autoencode_density": "dense", "autoencode_order": "reverse"})],
            20_000_000,
            "α≈0 reproduce · EXACT δ-toggle · KNOWN minimal RM → exact probe ground truth"),
-    EnvArm("S13", "MiniGrid-MemoryS13-v0", "memrl-memtrain-s13", SIX,
+    EnvArm("S13", "MiniGrid-MemoryS13-v0", "memrl-memtrain-s13", ZOO12,
            ["none", "e3b_idm", "noveld"], [Density("sparse")],
-           20_000_000,
-           "α≈0 recall · retention contrast (e3b≈none) · noveld≥e3b reversal (a feature)"),
+           10_000_000,
+           "EMBODIED PO retention (egocentric 7×7) · α≈0 bonus-neutral contrast · "
+           "noveld≥e3b reversal · FULL 12-cell zoo → cell×memory-type recall comparison"),
     EnvArm("Battleship", "popgym-BattleshipEasy-v0", "memrl-memtrain-battleship", FOUR,
            ["none", "e3b_idm"],
            [Density("dense", env_kwargs={"expose_action_coords": True}),
