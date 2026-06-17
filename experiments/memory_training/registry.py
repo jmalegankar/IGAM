@@ -83,6 +83,9 @@ class EnvArm:
     role: str                         # what this env-slice uniquely contributes
     seeds: list = field(default_factory=lambda: [0, 1, 2, 3, 4])
     blocked_on: str = ""
+    hp: dict = field(default_factory=dict)   # per-env HP overrides (the global HP
+                                             # is the MysteryPath winner; other envs
+                                             # were tuned differently)
 
 
 @dataclass
@@ -134,7 +137,11 @@ CORE = [
            ["none", "e3b_idm", "noveld"], [Density("sparse")],
            10_000_000,
            "EMBODIED PO retention (egocentric 7×7) · α≈0 bonus-neutral contrast · "
-           "noveld≥e3b reversal · FULL 12-cell zoo → cell×memory-type recall comparison"),
+           "noveld≥e3b reversal · FULL 12-cell zoo → cell×memory-type recall comparison",
+           # S13's OWN tuned HP (the values that solved it in memrl-s13-baseline) —
+           # NOT the MysteryPath global HP. S13's delayed cross-corridor reward needs
+           # the longer credit horizon (gamma/λ) and lr 3e-4.
+           hp={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
     EnvArm("Battleship", "popgym-BattleshipEasy-v0", "memrl-memtrain-battleship", FOUR,
            ["none", "e3b_idm"],
            [Density("dense", env_kwargs={"expose_action_coords": True}),
@@ -196,7 +203,7 @@ METHOD = {m.eid: m for m in METHODS}
 
 
 # ── config / script emission (NOT auto-run) ─────────────────────────────────
-def _cfg(env_name, project, cell, dens, intrinsic, budget, eid, env_tag):
+def _cfg(env_name, project, cell, dens, intrinsic, budget, eid, env_tag, hp_extra=None):
     cfg = {"env_name": env_name}
     if dens.env_kwargs:
         cfg["env_kwargs"] = dens.env_kwargs
@@ -207,7 +214,9 @@ def _cfg(env_name, project, cell, dens, intrinsic, budget, eid, env_tag):
               "ent_coef", "vf_coef", "max_grad_norm", "target_kl",
               "chunk_len", "n_chunks_per_batch"):
         cfg[k] = HP[k]
-    cfg.update(dens.cfg)
+    if hp_extra:                       # per-env HP override (e.g. S13's tuned HP)
+        cfg.update(hp_extra)
+    cfg.update(dens.cfg)               # density-specific (e.g. λ-sweep) wins last
     cfg["intrinsic"] = intrinsic
     if intrinsic != "none":
         cfg["lambda_intrinsic"] = HP["lambda_intrinsic"]
@@ -243,7 +252,7 @@ exec "$PYTHON" -m train --config "$CFG" --seed {seed} \\
 
 
 def _emit_grid(eid, env_name, project, cells, intrinsics, densities, seeds, budget,
-               env_tag, subdir):
+               env_tag, subdir, hp_extra=None):
     """Emit one env×density×bonus×cell×seed grid → configs/<subdir>/ scripts/<subdir>/.
     ONE launch script per run (one GPU each): no intrinsic-packing → no OOM, and
     bonus-vs-none stays fair because seeds are matched across jobs."""
@@ -262,7 +271,7 @@ def _emit_grid(eid, env_name, project, cells, intrinsics, densities, seeds, budg
             for intr in intrinsics:
                 with open(cdir / f"{cell}_{dens.label}_{intr}.yaml", "w") as f:
                     yaml.safe_dump(_cfg(env_name, project, cell, dens, intr, budget,
-                                        eid, env_tag), f, sort_keys=False)
+                                        eid, env_tag, hp_extra), f, sort_keys=False)
                 ncfg += 1
                 for seed in seeds:
                     # filename has NO eid prefix — the dir (scripts/<eid>/…) already
@@ -283,7 +292,8 @@ def emit_core(only_env: str | None = None):
         if arm.blocked_on:
             print(f"  [E1:{arm.env}] BLOCKED: {arm.blocked_on}"); continue
         c, s = _emit_grid("E1", arm.env_name, arm.project, arm.cells, arm.intrinsics,
-                          arm.densities, arm.seeds, arm.budget, arm.env, f"E1/{arm.env}")
+                          arm.densities, arm.seeds, arm.budget, arm.env, f"E1/{arm.env}",
+                          hp_extra=arm.hp)
         print(f"  [E1:{arm.env}] {c} configs, {s} scripts → configs/E1/{arm.env}/")
         tot_c += c; tot_s += s
     print(f"  E1 total: {tot_c} configs, {tot_s} scripts")
