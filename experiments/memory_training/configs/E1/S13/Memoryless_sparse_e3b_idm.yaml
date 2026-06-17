@@ -1,6 +1,8 @@
 env_name: MiniGrid-MemoryS13-v0
+env_kwargs:
+  agent_view_size: 3
 n_envs: 16
-total_timesteps: 10000000
+total_timesteps: 20000000
 seed: 0
 cell:
   name: Memoryless

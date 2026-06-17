@@ -134,10 +134,13 @@ CORE = [
            20_000_000,
            "α≈0 reproduce · EXACT δ-toggle · KNOWN minimal RM → exact probe ground truth"),
     EnvArm("S13", "MiniGrid-MemoryS13-v0", "memrl-memtrain-s13", ZOO12,
-           ["none", "e3b_idm", "noveld"], [Density("sparse")],
-           10_000_000,
-           "EMBODIED PO retention (egocentric 7×7) · α≈0 bonus-neutral contrast · "
-           "noveld≥e3b reversal · FULL 12-cell zoo → cell×memory-type recall comparison",
+           ["none", "e3b_idm", "noveld"],
+           [Density("sparse", env_kwargs={"agent_view_size": 3})],
+           20_000_000,
+           "EMBODIED PO retention (egocentric 3×3 view: forces cue→memory, widens the "
+           "memory-vs-Memoryless gap + extends the forced-retention window = cleaner "
+           "realization probe) · α≈0 bonus-neutral contrast · noveld≥e3b reversal · "
+           "FULL 12-cell zoo → cell×memory-type recall comparison",
            # S13's OWN tuned HP (the values that solved it in memrl-s13-baseline) —
            # NOT the MysteryPath global HP. S13's delayed cross-corridor reward needs
            # the longer credit horizon (gamma/λ) and lr 3e-4.

@@ -249,6 +249,11 @@ All probe outputs are JSON lines from `memrl/probes/decode_memory.py` (decodabil
 
 ## 7. Pre-registration block (file before unblinding the 5-seed comparisons)
 
+**Superseded and locked by `docs/preregistration.md` (filed 2026-06-16).** That file
+is the authoritative source for the headline claim, primary metric, statistical tests,
+equivalence margins, the locked idle-fraction / lag-Δ-retention / PBIM-ρ rules, and the
+inclusion/survivorship rules. The summary below is retained for orientation.
+
 - Decodability decision rule (E1/E2): §3.
 - α is **not** a claimed taxonomy; if reported, measured under a fixed reference
   occupancy with a locked threshold (see review §6) — otherwise descriptive only.
