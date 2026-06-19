@@ -151,7 +151,9 @@ CORE = [
             Density("sparse", env_kwargs={"expose_action_coords": True, "defer_reward": True})],
            10_000_000,
            "α>0 probing (2nd positive env) → generalizes 'bonus helps' beyond MysteryPath"),
-    EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny", SIX,
+    EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny",
+           SIX + ["GTrXL", "LinearTransformer"],   # +full-attn + linear-attn: does
+           # attention beat the SSM exact-recall floor? (Jelassi "Repeat After Me")
            ["none", "e3b_idm"],
            [Density("sparse", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"}),
             Density("dense", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
@@ -201,6 +203,20 @@ METHODS = [
            ["none", "e3b_idm", "e3b_idm_shared"], [_mpg("sparse")], [0, 1, 2, 3, 4], 10_000_000,
            "shared-IDM-aux raises decodability+success w/o policy-bias cost ⇒ credit-to-memory",
            blocked_on="build e3b_idm_shared arm (IDM φ = policy encoder, aux CE into backbone)"),
+    Method("E15", "GatedDeltaNet LR×state-dim sweep on Tiny (rigor: tuning, not capacity)",
+           "TinyReproduce-v0", "memrl-memtrain-gdnsweep", ["GatedDeltaNet"], ["none"],
+           # each Density = one (lr, assoc_size) cell: cfg overrides lr AND the cell
+           # kwargs (assoc_size); env_kwargs pins k=10/v=4 sparse (the exact-recall task
+           # where GDN floors at the registry lr=1e-4). labels avoid dots (k8s-valid).
+           [Density(f"lr{lt}_a{a}",
+                    env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"},
+                    cfg={"lr": lv, "cell": {"name": "GatedDeltaNet",
+                                            "kwargs": {"assoc_size": a}}})
+            for (lt, lv) in (("1e4", 1e-4), ("3e4", 3e-4), ("1e3", 1e-3), ("3e3", 3e-3))
+            for a in (64, 256)],
+           [0, 1], 10_000_000,
+           "C4/F8: does GDN close the gated-RNN exact-recall gap at its best HP? "
+           "report cell rankings at per-cell-best HP (k10 floor at lr1e-4 is tuning, not capacity)"),
 ]
 METHOD = {m.eid: m for m in METHODS}
 
@@ -342,7 +358,9 @@ def main():
     ap.add_argument("--emit-all", action="store_true")
     args = ap.parse_args()
     if args.emit:
-        if args.emit.startswith("E1"):
+        # exact "E1" or "E1:<env>" → core grid; everything else (incl. methods that
+        # start with "E1" like E10/E11/E15) → method dispatch.
+        if args.emit == "E1" or args.emit.startswith("E1:"):
             env = args.emit.split(":", 1)[1] if ":" in args.emit else None
             emit_core(env)
         else:

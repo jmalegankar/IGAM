@@ -39,6 +39,24 @@ Per-cell balanced accuracy + macro-AUC are reported; the headline metric is the
 mean over visited cells of (K) — "how much of what it has seen does the memory
 still hold?"
 
+Calibration (so a NULL is real, not a blind/under-fit probe)
+------------------------------------------------------------
+A "the bonus didn't help realization" claim is only valid if the probe could have
+SEEN a difference. We make every read false-negative-safe and false-positive-gated:
+  * features standardized on train stats + trained to convergence — an under-fit
+    probe reports "not decodable" on clean signal (the worst failure mode);
+  * report BOTH linear (Moore-separability = headline) AND MLP (information-present);
+    linear-flat + MLP-high = "stored-not-separable", never "no realization";
+  * a shuffled-label floor (refit on permuted y, n_shuffles); a cell is credited
+    only if its accuracy clears floor_mean + 2.5·floor_std (kills the max(0,·) clamp
+    bias) — see `_credit`. `resolved_bits` sums only significant cells;
+  * an OBS-ONLY baseline (source="O"): if the latent decodes from the raw obs, the
+    hidden-state read is a ceiling artifact (the MysteryPath K-saturation mode) — on
+    register envs the PLAY phase masks the token so this should sit at the floor;
+  * register envs (Tiny/Autoencode) decode the EXACT minimal-RM state PLAY-phase only;
+  * stateless cells (Memoryless) return resolved_bits=None — realization UNDEFINED,
+    not a measured null (the actor state is a constant, which would read as chance).
+
 Usage
 -----
     python -m memrl.probes.decode_memory \
@@ -55,6 +73,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -197,12 +216,26 @@ def _flatten_actor_state(cell_state: dict, device) -> torch.Tensor:
     return torch.cat(parts, dim=-1) if parts else torch.zeros((1, 1), device=device)
 
 
+def _actor_state_is_empty(cell_state: dict) -> bool:
+    """True if the actor side carries NO recurrent tensor (e.g. Memoryless).
+
+    Without this guard `_flatten_actor_state` returns a constant zeros((1,1)), so a
+    stateless cell would decode at the empirical floor BY CONSTRUCTION and masquerade
+    as a measured 'realization = NO'. Callers must report stateless cells as
+    realization-UNDEFINED, never as a null with content.
+    """
+    from memrl.policy.policy import _split_state
+    actor_state, _ = _split_state(cell_state)
+    return not any(torch.is_tensor(v) for v in actor_state.values())
+
+
 @torch.no_grad()
 def extract_states(policy, bank: list[dict], device: str = "cpu") -> dict:
     """Replay each episode's observations through `policy`, collecting the actor
     recurrent state aligned with the latent labels. Coverage is fixed by the bank,
     so this isolates the representation."""
-    H, K, F, VIS = [], [], [], []
+    H, O, K, F, VIS = [], [], [], [], []
+    stateless = False
     for ep in bank:
         cell_state = policy.initial_state(1, torch.device(device))
         T = ep["obs"].shape[0]
@@ -211,64 +244,101 @@ def extract_states(policy, bank: list[dict], device: str = "cpu") -> dict:
             es = torch.as_tensor(ep["episode_start"][t:t+1], device=device)
             # forward returns (action, value, log_prob, new_state, side)
             _, _, _, cell_state, _ = policy.forward(o, cell_state, es)
+            stateless = stateless or _actor_state_is_empty(cell_state)
             h = _flatten_actor_state(cell_state, device)[0].cpu().numpy()
-            H.append(h); K.append(ep["knowledge"][t]); F.append(ep["full"][t])
+            H.append(h); O.append(ep["obs"][t].reshape(-1))
+            K.append(ep["knowledge"][t]); F.append(ep["full"][t])
             VIS.append(ep["visited"][t])
-    return {"H": np.asarray(H, np.float32), "K": np.asarray(K, np.int8),
-            "F": np.asarray(F, np.int8), "VIS": np.asarray(VIS, np.int8)}
+    return {"H": np.asarray(H, np.float32), "O": np.asarray(O, np.float32),
+            "K": np.asarray(K, np.int8), "F": np.asarray(F, np.int8),
+            "VIS": np.asarray(VIS, np.int8), "stateless": stateless}
 
 
 # ──────────────────────────────────────────────────────────────────────────
 # Probe training (linear + MLP), per-cell balanced accuracy
 # ──────────────────────────────────────────────────────────────────────────
-def _fit_probe_torch(X, y, kind="linear", epochs=150, device="cpu"):
-    """Binary probe; returns test balanced-accuracy. y in {0,1}."""
+def _fit_probe_torch(X, y, kind="linear", epochs=300, device="cpu", n_shuffles=10):
+    """Binary probe. Returns (test balanced-accuracy, floor_mean, floor_std).
+
+    The floor is the SAME probe refit on permuted training labels and scored on the
+    real test labels — the empirical false-positive baseline, repeated `n_shuffles`
+    times so callers can credit only accuracy that is SIGNIFICANTLY above the floor
+    distribution (mean + 2·std), not merely above its mean. Without the std gate the
+    per-cell max(0,·) clamp biases resolved-bits upward on pure noise.
+    """
     n = X.shape[0]
     idx = np.random.default_rng(0).permutation(n)
     cut = int(0.8 * n)
     tr, te = idx[:cut], idx[cut:]
-    Xtr = torch.as_tensor(X[tr], device=device); ytr = torch.as_tensor(y[tr], dtype=torch.float32, device=device)
-    Xte = torch.as_tensor(X[te], device=device); yte = y[te]
     d = X.shape[1]
-    if kind == "linear":
-        net = torch.nn.Linear(d, 1).to(device)
-    else:
-        net = torch.nn.Sequential(torch.nn.Linear(d, 128), torch.nn.ReLU(),
-                                  torch.nn.Linear(128, 1)).to(device)
-    opt = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-4)
-    # class-balanced BCE
-    pos = float(ytr.mean()) + 1e-6
-    w = torch.where(ytr > 0.5, torch.tensor(0.5 / pos, device=device),
-                    torch.tensor(0.5 / (1 - pos), device=device))
-    for _ in range(epochs):
-        opt.zero_grad(set_to_none=True)
-        logit = net(Xtr).squeeze(-1)
-        loss = torch.nn.functional.binary_cross_entropy_with_logits(logit, ytr, weight=w)
-        loss.backward(); opt.step()
-    with torch.no_grad():
-        pred = (torch.sigmoid(net(Xte).squeeze(-1)).cpu().numpy() > 0.5).astype(int)
-    # balanced accuracy
-    out = []
-    for c in (0, 1):
-        m = yte == c
-        if m.sum() > 0:
-            out.append((pred[m] == c).mean())
-    return float(np.mean(out)) if out else 0.5
+    # Standardize features on TRAIN stats — recurrent states have wildly different
+    # per-dim scales; without this a linear probe under-fits genuine signal (a
+    # false-negative machine). Then train enough to actually converge.
+    mu = X[tr].mean(0, keepdims=True); sd = X[tr].std(0, keepdims=True) + 1e-6
+    Xz = (X - mu) / sd
+
+    def _fit(ytr_arr, yte_arr):
+        Xtr = torch.as_tensor(Xz[tr], device=device)
+        ytr = torch.as_tensor(ytr_arr, dtype=torch.float32, device=device)
+        Xte = torch.as_tensor(Xz[te], device=device)
+        if kind == "linear":
+            net = torch.nn.Linear(d, 1).to(device)
+        else:
+            net = torch.nn.Sequential(torch.nn.Linear(d, 128), torch.nn.ReLU(),
+                                      torch.nn.Linear(128, 1)).to(device)
+        opt = torch.optim.Adam(net.parameters(), lr=3e-3, weight_decay=1e-5)
+        pos = float(ytr.mean()) + 1e-6
+        w = torch.where(ytr > 0.5, torch.tensor(0.5 / pos, device=device),
+                        torch.tensor(0.5 / (1 - pos), device=device))
+        for _ in range(epochs):
+            opt.zero_grad(set_to_none=True)
+            logit = net(Xtr).squeeze(-1)
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(logit, ytr, weight=w)
+            loss.backward(); opt.step()
+        with torch.no_grad():
+            pred = (torch.sigmoid(net(Xte).squeeze(-1)).cpu().numpy() > 0.5).astype(int)
+        out = [(pred[yte_arr == c] == c).mean() for c in (0, 1) if (yte_arr == c).sum() > 0]
+        return float(np.mean(out)) if out else 0.5
+
+    acc = _fit(y[tr], y[te])
+    floors = [_fit(y[tr][np.random.default_rng(1000 + s).permutation(len(tr))], y[te])
+              for s in range(max(1, n_shuffles))]
+    return acc, float(np.mean(floors)), float(np.std(floors))
 
 
-def decodability(states: dict, target="K", kind="linear", grid_dim=7, device="cpu") -> dict:
+def _credit(acc, floor_mean, floor_std, z=2.5):
+    """Resolved fraction 0..1 of one classifier, gated for significance: 0 unless the
+    real accuracy clears the shuffled-floor distribution by z·std (kills the clamp
+    bias on noise), then (acc − floor_mean)/(1 − floor_mean)."""
+    if acc <= floor_mean + z * floor_std:
+        return 0.0
+    return max(0.0, (acc - floor_mean) / (1.0 - floor_mean + 1e-9))
+
+
+def decodability(states: dict, target="K", kind="linear", grid_dim=7, device="cpu",
+                 source="H") -> dict:
     """Mean per-cell balanced accuracy of decoding the latent grid from h_t.
 
     target="K": knowledge grid (was this cell confirmed on/off path?) — we decode
                 the binary "is this cell a CONFIRMED PATH tile" over VISITED cells.
     target="F": full path map (is this cell on the path), all cells.
+    source="H": decode from the recurrent hidden state (the realization read).
+    source="O": decode from the raw OBSERVATION (ceiling/leakage control — if the
+                latent is decodable from the obs alone, the hidden-state read is
+                uninterpretable, which is the MysteryPath K-saturation failure mode).
 
-    Also returns per-cell accuracies (for the effective-RM-size readout) and the
-    summed "resolved bits" = Σ_cell max(0, 2·(bal_acc − 0.5)) — a 0..1 resolved
-    fraction per binary cell, summed to bits of minimal-RM state the memory holds.
+    `resolved_bits` credits, per binary cell, only accuracy ABOVE the empirical
+    shuffled-label floor: Σ_cell max(0, (acc − floor)/(1 − floor)).  Stateless cells
+    (Memoryless) return resolved_bits=None — realization is UNDEFINED, not a null.
     """
-    H = states["H"]
-    accs = []
+    if states.get("stateless") and source == "H":
+        return {"mean_bal_acc": None, "mean_chance_floor": None, "n_cells": 0,
+                "target": target, "probe": kind, "source": source,
+                "resolved_bits": None, "resolved_frac": None, "eff_rm_size_bits": None,
+                "stateless": True,
+                "note": "no recurrent state; realization undefined (not a measured null)"}
+    X_all = states[source]
+    accs, floors, credits = [], [], []
     for cell in range(grid_dim * grid_dim):
         if target == "K":
             # restrict to rows where this cell has been visited; label = on-path(1)/off(0)
@@ -276,17 +346,21 @@ def decodability(states: dict, target="K", kind="linear", grid_dim=7, device="cp
             if vis.sum() < 50:
                 continue
             y = (states["K"][vis, cell] == 1).astype(int)
-            X = H[vis]
+            X = X_all[vis]
         else:
             y = (states["F"][:, cell] == 1).astype(int)
-            X = H
+            X = X_all
         if len(np.unique(y)) < 2:
             continue
-        accs.append(_fit_probe_torch(X, y, kind=kind, device=device))
-    resolved_bits = float(np.sum([max(0.0, 2.0 * (a - 0.5)) for a in accs]))
-    return {"mean_bal_acc": float(np.mean(accs)) if accs else 0.5,
-            "n_cells": len(accs), "target": target, "probe": kind,
-            "resolved_bits": resolved_bits,
+        a, fmean, fstd = _fit_probe_torch(X, y, kind=kind, device=device)
+        accs.append(a); floors.append(fmean); credits.append(_credit(a, fmean, fstd))
+    resolved_bits = float(np.sum(credits))
+    return {"mean_bal_acc": float(np.mean(accs)) if accs else None,
+            "mean_chance_floor": float(np.mean(floors)) if floors else None,
+            "n_cells": len(accs), "n_significant": int(np.sum(np.asarray(credits) > 0)),
+            "target": target, "probe": kind, "source": source,
+            "resolved_bits": resolved_bits, "resolved_bits_max": float(len(accs)),
+            "resolved_frac": float(resolved_bits / len(accs)) if accs else None,
             "eff_rm_size_bits": float(2.0 ** resolved_bits)}
 
 
@@ -304,23 +378,44 @@ def collect_bank_autoencode(vec_env, n_episodes: int, max_pos: int = 12,
     rng = np.random.default_rng(seed)
     asp = vec_env.action_space
     n_act = asp.n if hasattr(asp, "n") else int(np.prod(asp.nvec))
-    bank, ep = [], None
+    raw = _unwrap(vec_env)
+    # TEACHER-FORCING: reproduce envs (TinyReproduce) TERMINATE on the first wrong
+    # play token, so a uniform-random bank dies before the play phase → no retention
+    # data. Drive the env with the CORRECT token (env._target()) instead: this both
+    # traverses the full play phase AND gives policy-independent MATCHED coverage —
+    # every checkpoint replays the identical correct trajectory, so a decodability
+    # gap is representational. Watch-phase actions are ignored by the env. Envs with
+    # no `_target` oracle fall back to random (warned if play coverage is thin).
+    teacher = hasattr(raw, "_target")
+
+    def _reset_rm():
+        return (tuple(getattr(raw, "_seq", ())[:getattr(raw, "_shown", 0)])
+                if teacher else ())
+
+    bank = []
     obs = vec_env.reset()
-    cur_rm = ()                       # unknown until first step's info
+    raw = _unwrap(vec_env)
+    cur_rm = _reset_rm()                          # SB3 drops reset info → read it here
     first = True
     eps_done = 0
-    ep = {"obs": [], "episode_start": [], "remaining": []}
+    ep = {"obs": [], "episode_start": [], "remaining": [], "is_play": []}
     guard = 0
-    while eps_done < n_episodes and guard < n_episodes * 1000:
+    while eps_done < n_episodes and guard < n_episodes * 4000:
         guard += 1
         rem = np.full(max_pos, -1, dtype=np.int64)
         for i, s in enumerate(cur_rm[:max_pos]):
             rem[i] = int(s)
-        ep["obs"].append(np.asarray(obs, dtype=np.float32)[0])
+        o0 = np.asarray(obs, dtype=np.float32)[0]
+        ep["obs"].append(o0)
         ep["episode_start"].append(bool(first))
         ep["remaining"].append(rem)
+        ep["is_play"].append(bool(o0[1] > 0.5))   # obs = [is_watch, is_play, onehot]
         first = False
-        act = np.array([rng.integers(0, n_act)])
+        raw = _unwrap(vec_env)
+        if teacher:
+            act = np.array([int(raw._target())])   # correct token (ignored in watch)
+        else:
+            act = np.array([rng.integers(0, n_act)])
         obs, _, dones, infos = vec_env.step(act)
         info0 = infos[0] if isinstance(infos, (list, tuple)) else infos
         cur_rm = tuple(info0.get("rm_state", ()))
@@ -328,10 +423,15 @@ def collect_bank_autoencode(vec_env, n_episodes: int, max_pos: int = 12,
             for k in ep:
                 ep[k] = np.asarray(ep[k])
             bank.append(ep)
-            ep = {"obs": [], "episode_start": [], "remaining": []}
+            ep = {"obs": [], "episode_start": [], "remaining": [], "is_play": []}
             eps_done += 1
             first = True
-            cur_rm = ()
+            raw = _unwrap(vec_env)
+            cur_rm = _reset_rm()
+    n_play = int(sum(int(np.asarray(e["is_play"]).sum()) for e in bank))
+    if n_play < 50:
+        print(f"  [probe] WARNING: only {n_play} play-phase steps (teacher={teacher}); "
+              f"realization read will be empty.", file=sys.stderr)
     return bank
 
 
@@ -339,7 +439,8 @@ def collect_bank_autoencode(vec_env, n_episodes: int, max_pos: int = 12,
 def extract_states_autoencode(policy, bank: list[dict], device: str = "cpu") -> dict:
     """Replay each episode's obs through `policy`; collect actor state + the
     padded remaining-suit latent (the exact minimal-RM state)."""
-    H, R = [], []
+    H, O, R, PLAY = [], [], [], []
+    stateless = False
     for ep in bank:
         cell_state = policy.initial_state(1, torch.device(device))
         T = ep["obs"].shape[0]
@@ -347,58 +448,100 @@ def extract_states_autoencode(policy, bank: list[dict], device: str = "cpu") -> 
             o = torch.as_tensor(ep["obs"][t:t + 1], device=device)
             es = torch.as_tensor(ep["episode_start"][t:t + 1], device=device)
             _, _, _, cell_state, _ = policy.forward(o, cell_state, es)
+            stateless = stateless or _actor_state_is_empty(cell_state)
             h = _flatten_actor_state(cell_state, device)[0].cpu().numpy()
-            H.append(h); R.append(ep["remaining"][t])
-    return {"H": np.asarray(H, np.float32), "R": np.asarray(R, np.int64)}
+            H.append(h); O.append(ep["obs"][t].reshape(-1))
+            R.append(ep["remaining"][t]); PLAY.append(bool(ep["is_play"][t]))
+    return {"H": np.asarray(H, np.float32), "O": np.asarray(O, np.float32),
+            "R": np.asarray(R, np.int64), "is_play": np.asarray(PLAY, bool),
+            "stateless": stateless}
 
 
-def _fit_probe_multiclass(X, y, n_classes, kind="linear", epochs=150, device="cpu"):
-    """Multiclass probe; returns test accuracy. y in {0..n_classes-1}."""
+def _fit_probe_multiclass(X, y, n_classes, kind="linear", epochs=300, device="cpu",
+                          n_shuffles=10):
+    """Multiclass probe. Returns (test accuracy, floor_mean, floor_std).
+
+    The empirical floor (probe refit on permuted labels) beats the theoretical 1/K
+    chance when classes are imbalanced; the std over shuffles lets callers gate for
+    significance (mean + 2·std) rather than crediting any accuracy above the mean.
+    """
     n = X.shape[0]
     idx = np.random.default_rng(0).permutation(n)
     cut = int(0.8 * n)
     tr, te = idx[:cut], idx[cut:]
-    Xtr = torch.as_tensor(X[tr], device=device); ytr = torch.as_tensor(y[tr], dtype=torch.long, device=device)
-    Xte = torch.as_tensor(X[te], device=device); yte = y[te]
     d = X.shape[1]
-    if kind == "linear":
-        net = torch.nn.Linear(d, n_classes).to(device)
-    else:
-        net = torch.nn.Sequential(torch.nn.Linear(d, 128), torch.nn.ReLU(),
-                                  torch.nn.Linear(128, n_classes)).to(device)
-    opt = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-4)
-    for _ in range(epochs):
-        opt.zero_grad(set_to_none=True)
-        loss = torch.nn.functional.cross_entropy(net(Xtr), ytr)
-        loss.backward(); opt.step()
-    with torch.no_grad():
-        pred = net(Xte).argmax(-1).cpu().numpy()
-    return float((pred == yte).mean())
+    mu = X[tr].mean(0, keepdims=True); sd = X[tr].std(0, keepdims=True) + 1e-6
+    Xz = (X - mu) / sd
+
+    def _fit(ytr_arr, yte_arr):
+        Xtr = torch.as_tensor(Xz[tr], device=device)
+        ytr = torch.as_tensor(ytr_arr, dtype=torch.long, device=device)
+        Xte = torch.as_tensor(Xz[te], device=device)
+        if kind == "linear":
+            net = torch.nn.Linear(d, n_classes).to(device)
+        else:
+            net = torch.nn.Sequential(torch.nn.Linear(d, 128), torch.nn.ReLU(),
+                                      torch.nn.Linear(128, n_classes)).to(device)
+        opt = torch.optim.Adam(net.parameters(), lr=3e-3, weight_decay=1e-5)
+        for _ in range(epochs):
+            opt.zero_grad(set_to_none=True)
+            loss = torch.nn.functional.cross_entropy(net(Xtr), ytr)
+            loss.backward(); opt.step()
+        with torch.no_grad():
+            pred = net(Xte).argmax(-1).cpu().numpy()
+        return float((pred == yte_arr).mean())
+
+    acc = _fit(y[tr], y[te])
+    floors = [_fit(y[tr][np.random.default_rng(1000 + s).permutation(len(tr))], y[te])
+              for s in range(max(1, n_shuffles))]
+    return acc, float(np.mean(floors)), float(np.std(floors))
 
 
-def decodability_autoencode(states: dict, n_suits=4, kind="linear", device="cpu") -> dict:
+def decodability_autoencode(states: dict, n_suits=4, kind="linear", device="cpu",
+                            source="H", play_only=True) -> dict:
     """Decode the remaining-to-reproduce suit at each relative position from h_t.
 
-    resolved_bits = Σ_pos 2·max(0, (acc − chance)/(1 − chance)) — bits of the
-    exact minimal-RM state the memory holds (2 bits/position for 4 suits).
-    eff_rm_size_bits = 2^resolved_bits. Freeze ⇒ ≈chance everywhere ⇒ ≈1 state.
+    Restricted to PLAY-phase steps (play_only=True): during WATCH the shown token is
+    one-hot in the obs, so decoding it is leakage, not retention. Play-phase steps
+    mask the token → a clean forced-retention read of the exact minimal-RM state.
+
+    source="H": recurrent hidden state (the realization read).
+    source="O": raw obs (leakage control — should be ≈floor in the play phase).
+
+    resolved_bits = Σ_pos log2(n_suits)·max(0, (acc − floor)/(1 − floor)) against the
+    EMPIRICAL shuffled-label floor (not theoretical 1/K). Stateless cells return None.
     """
-    H, R = states["H"], states["R"]
+    if states.get("stateless") and source == "H":
+        return {"mean_acc": None, "mean_chance_floor": None, "n_pos": 0, "probe": kind,
+                "source": source, "play_only": bool(play_only), "resolved_bits": None,
+                "resolved_frac": None, "eff_rm_size_bits": None, "per_pos": [],
+                "stateless": True,
+                "note": "no recurrent state; realization undefined (not a measured null)"}
+    X_all, R = states[source], states["R"]
     max_pos = R.shape[1]
-    chance = 1.0 / n_suits
-    accs, per_pos = [], []
+    bits_per = float(np.log2(n_suits))
+    rowmask = (states["is_play"].astype(bool) if (play_only and "is_play" in states)
+               else np.ones(R.shape[0], dtype=bool))
+    accs, floors, credits, per_pos = [], [], [], []
     for p in range(max_pos):
-        mask = R[:, p] >= 0                       # this relative position has a card
+        mask = (R[:, p] >= 0) & rowmask           # this position has a card AND play-phase
         if mask.sum() < 50:
             continue
-        y = R[mask, p]; X = H[mask]
+        y = R[mask, p]; X = X_all[mask]
         if len(np.unique(y)) < 2:
             continue
-        a = _fit_probe_multiclass(X, y, n_suits, kind=kind, device=device)
-        accs.append(a); per_pos.append((p, round(a, 3)))
-    resolved_bits = float(np.sum([2.0 * max(0.0, (a - chance) / (1 - chance)) for a in accs]))
-    return {"mean_acc": float(np.mean(accs)) if accs else chance,
-            "n_pos": len(accs), "probe": kind, "resolved_bits": resolved_bits,
+        a, fmean, fstd = _fit_probe_multiclass(X, y, n_suits, kind=kind, device=device)
+        cr = _credit(a, fmean, fstd)
+        accs.append(a); floors.append(fmean); credits.append(cr)
+        per_pos.append((p, round(a, 3), round(fmean, 3), round(bits_per * cr, 3)))
+    resolved_bits = float(np.sum([bits_per * c for c in credits]))
+    return {"mean_acc": float(np.mean(accs)) if accs else None,
+            "mean_chance_floor": float(np.mean(floors)) if floors else None,
+            "n_pos": len(accs), "n_significant": int(np.sum(np.asarray(credits) > 0)),
+            "probe": kind, "source": source, "play_only": bool(play_only),
+            "resolved_bits": resolved_bits,
+            "resolved_bits_max": float(len(accs) * bits_per),
+            "resolved_frac": float(resolved_bits / (len(accs) * bits_per)) if accs else None,
             "eff_rm_size_bits": float(2.0 ** resolved_bits), "per_pos": per_pos}
 
 
@@ -418,10 +561,22 @@ def effective_rm_size(states: dict, grid_dim=7, ks=(1, 2, 4, 8, 16, 32),
         knowledge-grid state. The k at which AMI plateaus ≈ #RM states the memory
         actually separates. Uses sklearn if available; else skipped.
     """
-    out = decodability(states, target="K", kind="linear", grid_dim=grid_dim, device=device)
-    result = {"resolved_bits": out["resolved_bits"],
-              "eff_rm_size_bits": out["eff_rm_size_bits"],
-              "mean_bal_acc": out["mean_bal_acc"]}
+    if states.get("stateless"):
+        return {"stateless": True, "resolved_bits": None, "eff_rm_size_bits": None,
+                "note": "no recurrent state; effective RM size undefined"}
+    # Report BOTH probes: linear = Moore-separability (the headline); MLP = information
+    # present at all. linear-flat + MLP-high = "stored-but-not-separable" (a finding),
+    # never "no realization". Reporting only linear conflates absence with nonlinearity.
+    result = {}
+    for kind in ("linear", "mlp"):
+        out = decodability(states, target="K", kind=kind, grid_dim=grid_dim, device=device)
+        result[f"resolved_bits_{kind}"] = out["resolved_bits"]
+        result[f"eff_rm_size_bits_{kind}"] = out["eff_rm_size_bits"]
+        result[f"mean_bal_acc_{kind}"] = out["mean_bal_acc"]
+        result[f"mean_chance_floor_{kind}"] = out["mean_chance_floor"]
+    # back-compat headline aliases (linear)
+    result["resolved_bits"] = result["resolved_bits_linear"]
+    result["eff_rm_size_bits"] = result["eff_rm_size_bits_linear"]
     # clustering cross-check (optional)
     try:
         from sklearn.cluster import KMeans
@@ -496,17 +651,28 @@ def main():
     probes = ["linear", "mlp"] if args.probe == "both" else [args.probe]
     if task == "autoencode":
         bank = collect_bank_autoencode(env, n_episodes=args.n_episodes, max_pos=args.max_pos)
+        obs_baseline_done = False
         for sp in snaps:
             step = int(sp.stem.split("step")[1])
             policy, _, _ = build_policy_from_snapshot(str(sp), device=args.device)
             states = extract_states_autoencode(policy, bank, device=args.device)
+            # Obs-only ceiling/leakage control (snapshot-independent → emit once). If
+            # this is well above floor in the PLAY phase, the token leaks from the obs
+            # and the hidden-state read is uninterpretable.
+            if not obs_baseline_done:
+                for pk in probes:
+                    ob = decodability_autoencode(states, n_suits=args.n_suits, kind=pk,
+                                                 device=args.device, source="O")
+                    print(json.dumps({"run": run.name, "metric": "obs_baseline_retention",
+                                      "control": "ceiling/leakage", **ob}))
+                obs_baseline_done = True
             for pk in probes:
-                res = decodability_autoencode(states, n_suits=args.n_suits,
-                                              kind=pk, device=args.device)
-                # res["per_pos"] = [(relative-position, acc), ...] = the lag-Δ
-                # RETENTION curve: position r is "decode the token due r steps from
-                # now" — how well the memory RETAINS each held token. Decay with r
-                # (and e3b>none) = the bonus aids retention; flat = it doesn't.
+                res = decodability_autoencode(states, n_suits=args.n_suits, kind=pk,
+                                              device=args.device, source="H")
+                # res["per_pos"] = [(rel-position, acc, shuffled_floor), ...] = the lag-Δ
+                # RETENTION curve over PLAY-phase steps: position r is "decode the token
+                # due r steps from now" — how well the memory RETAINS each held token.
+                # Decay with r (and e3b>none) = the bonus aids retention; flat = it doesn't.
                 print(json.dumps({"run": run.name, "step": step,
                                   "metric": "decodability_retention",
                                   "lag_retention_curve": res.get("per_pos"), **res}))
@@ -515,10 +681,23 @@ def main():
     bank = collect_bank(env, behavior=None, n_episodes=args.n_episodes,
                         max_steps=cfg.get("env_kwargs", {}).get("max_steps", 128))
     targets = ["K", "F"] if args.target == "both" else [args.target]
+    obs_baseline_done = False
     for sp in snaps:
         step = int(sp.stem.split("step")[1])
         policy, _, _ = build_policy_from_snapshot(str(sp), device=args.device)
         states = extract_states(policy, bank, device=args.device)
+        # Obs-only ceiling/leakage control (snapshot-independent → emit once). On
+        # MysteryPath the path marks stay observable, so this is expected HIGH — it
+        # is the witness that a flat hidden-state K-read is a ceiling artifact, not a
+        # representational null (relabel MysteryPath as belief-, not RM-, realization).
+        if not obs_baseline_done:
+            for tgt in targets:
+                for pk in probes:
+                    ob = decodability(states, target=tgt, kind=pk, device=args.device,
+                                      source="O")
+                    print(json.dumps({"run": run.name, "metric": "obs_baseline",
+                                      "control": "ceiling/leakage", **ob}))
+            obs_baseline_done = True
         for tgt in targets:
             for pk in probes:
                 res = decodability(states, target=tgt, kind=pk, device=args.device)

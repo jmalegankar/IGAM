@@ -40,6 +40,9 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
     if env_name.startswith("TinyReproduce"):
         from .tiny_reproduce import make_tiny_reproduce_vec_env
         return make_tiny_reproduce_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
+    if env_name.startswith("MiniWorld-"):
+        from .miniworld_wrappers import make_miniworld_vec_env
+        return make_miniworld_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("MiniGrid-"):
         return make_minigrid_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("TMaze-"):
