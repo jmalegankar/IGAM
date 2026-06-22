@@ -1,5 +1,13 @@
 # Paper skeleton — "Decodability Is Not Use" (working title)
 
+> **⚠️ SUPERSEDED 2026-06-21 by `docs/paper_full.md` ("Exploration Selects the Reward
+> Machine a Memory Agent Learns").** The "Decodability Is Not Use" thesis below was
+> RETIRED: the decode probe was shown to measure copy-capacity (random-init untrained ≈
+> trained), and "decodability ≠ use" is the NLP probing thesis (Hewitt-Liang / Elazar).
+> The live paper is the realized-reward-machine framing in `paper_full.md` (freeze = RM
+> collapse, Mealy–Moore keystone, behavioral eff-RM-size). This file is kept for
+> provenance and can be repurposed as the AAAI ~8pp crop of `paper_full.md`.
+
 *2026-06-19. SUPERSEDES `paper_plan_memory_training.md` (which predates the catalyst /
 conjunctive-necessity / realize-before-use pivots). Companion to `preregistration.md`,
 `theory_v2_memory_training.md`, `reference_rate_memory_standard`, `project_e1_first_results`.*
@@ -146,3 +154,173 @@ Realization saturates *early and cheaply* (GTrXL 10 bits at 0%), so the realizat
 action is all in **use**. Mitigation: make the paper *about* that (C2 is the headline,
 not a footnote); carry the behavioral claims on idle-fraction/coverage (C3), and the
 architecture claims on per-cell-best-HP success (C4), not on decodability alone.
+
+*Update (2026-06-21): this risk MATERIALIZED.* The decode probe was shown to measure
+**copy-capacity, not learned memory** — random-init untrained nets decode about as much
+as trained ones (GRU random 7.03 ≈ trained 7.04 bits; GTrXL random 9.4 ≈ trained 9.8),
+because the probe is teacher-forced. "Decodability ≠ use" / "realize-before-use" is
+therefore **retired** (it is the NLP-probing thesis — Hewitt–Liang 2019 control tasks,
+Elazar Amnesic-Probing 2021, Belinkov 2022 — and our correlational version is weaker).
+The headline has moved to the **realized reward-machine** thesis, carried by the
+confound-free behavioral instrument (`rm_coverage`), not the probe. The decode probe is
+kept only as a hardened **cautionary methods result** (+ the random-init floor). The
+re-filed registration that locks this new headline is Appendix A below; it re-files
+`preregistration.md` (2026-06-16) and the C1/C2 "Decodability Is Not Use" framing of
+§§1–9 above, which predate the probe collapse.
+
+---
+
+## Appendix A. Pre-registration (re-filed)
+
+**Re-filed 2026-06-21. This document re-files the earlier pre-registration**
+(`docs/preregistration.md`, filed 2026-06-16) **and supersedes the "Decodability Is Not
+Use" headline of `paper_skeleton.md` §§1–9 / `paper_plan_memory_training.md`.** The prior
+prereg's mechanism leg ("S1 behavioral, not representational," carried by the decode /
+lag-Δ retention probe — its §3 S1b/S1c and §7 item 3) is **withdrawn**: the decode probe
+was shown to measure copy-capacity, not learned memory (random-init untrained nets decode
+≈ as much as trained — GRU random 7.03 ≈ trained 7.04 bits; GTrXL random 9.4 ≈ trained
+9.8 — because it is teacher-forced). The headline moves from a **narrower freeze-only /
+decodability claim** to the **realized reward-machine** thesis. **This move is documented,
+not silent** (see the honesty rider, §A.1). Everything below is locked and is the
+governing registration of record.
+
+### A.0 Why this re-filing exists (honesty rider)
+
+The earlier prereg deliberately committed (its §0) to flagging any post-unblinding change
+of headline/sign/threshold as exactly that — a change, not a silent edit. We invoke that
+clause here. What changed and why:
+
+1. **The decode/realization probe collapsed under its own control.** Its hardened
+   random-init floor (the floor *we* added to `decode_memory.py`) showed untrained nets
+   decode ≈ as much as trained ones, because the probe is teacher-forced. So
+   "decodability ≠ use" / "realize-before-use" measures **copy-capacity**, not learned
+   memory, and is **retired**. It is also the NLP-probing thesis already (Hewitt–Liang
+   2019 control tasks; Elazar *Amnesic-Probing* 2021, who did it *causally*; Belinkov
+   2022 survey), so our correlational version was weaker. We keep the hardened probe
+   (shuffled-label floor, MLP, obs-baseline, play-phase) **only as a cautionary methods
+   result + the random-init floor** — it is never a primary or supporting metric.
+2. **The freeze-only headline was too narrow.** The freeze fixed point survives clean
+   (n=5, K1 below), but its *mechanism* is sharper than "anti-freeze un-sealing": the
+   penalty collapses the agent's **realized reward machine** (the Myhill–Nerode automaton
+   of its *realized* reward under its own policy; Toro Icarte 2018) to a single absorbing
+   do-nothing state, a non-potential bonus **re-inflates** it, and a policy-invariant
+   **potential (PBIM) provably cannot** re-inflate it (Mealy–Moore: a potential Φ is a
+   Moore object — one value per state — telescopes to 0 return and cannot relabel
+   transition-keyed reward, so it cannot move the realized RM `R(π)`). This is the new
+   headline (§A.2).
+
+Standing commitments (carried over from the prior prereg §0, still binding): report every
+registered test **in the direction it falls** (a null/flip is a result, not a discarded
+run); list every excluded run + the excluding rule; never introduce a post-unblinding
+grouping/sign/threshold without flagging it exploratory. Graceful degradation is
+pre-committed: **freeze + rescue + PBIM=none stand as standalone empirics; the RM-size
+instrument never carries the freeze by itself.**
+
+### A.1 The HEADLINE claim (locked — re-filed)
+
+> **Exploration selects the reward machine a memory agent learns.** A recurrent agent
+> converges to the **minimal reward machine of its REALIZED reward** (the Myhill–Nerode
+> automaton under its *own* policy; Toro Icarte 2018), **not** the specified task. A
+> faithful −0.008 fall penalty collapses that realized-reward RM to **one absorbing
+> do-nothing state** — the freeze is the agent **correctly learning a degenerate
+> automaton**, not failing to learn. A **non-potential** bonus (E3B/NovelD) **re-inflates**
+> the realized RM; a policy-invariant **potential** (PBIM) **provably cannot** (Mealy–Moore:
+> Φ is a Moore object, telescopes to 0 return, cannot relabel transition-keyed reward →
+> cannot move `R(π)`). Measured by **one confound-free behavioral instrument:
+> effective-RM-size** = the number of distinct realized-RM states the policy drives
+> through.
+
+This is the only object outside the four nearest priors; the novelty deltas are in §A.6.
+
+### A.2 Primary metric (locked)
+
+The primary readout is the triple **{eval success_rate, ep_num_fails (falls),
+behavioral effective-RM-size}** — the third measured on-policy by `rm_coverage.py`
+(rolls the agent's OWN deterministic policy and counts distinct realized-RM states +
+`idle_frac`; it does **not** teacher-force and does **not** decode a frozen state).
+
+- **The decode probe is NEVER a primary or supporting metric.** It is reported only as a
+  cautionary methods result (§A.0 item 1).
+- Shaped/episodic **return is never a cross-arm ranking metric** (the frozen agent's
+  shaped return 0.0 out-ranks a working agent's negative return — return ranks
+  doing-nothing above working).
+- **Sample:** n = 5 seeds per cell × density × bonus (n=4 accepted where stated); a run
+  counts iff it reached **≥ 95 %** of its step budget. Inclusion/exclusion + arm-vs-crash
+  survivorship rules carry over unchanged from `preregistration.md` §6.
+- **Statistics (unchanged from prior prereg §2):** difference tests = per-cell two-sided
+  **Mann–Whitney U** (primary) + Welch's t (secondary), effect size + bootstrap 95 % CI
+  (10 000 resamples); equivalence/null tests = **TOST** within a pre-registered margin,
+  with the 90 % CI inside ±margin, else "inconclusive (underpowered)" — a null is never
+  claimed from p > 0.05. Analysis is **per-cell**; any pooled number is secondary.
+
+### A.3 Locked decision rules (per registered finding)
+
+- **Freeze (F2):** confirmed iff `penalty(−0.008)-none` has success ≈ 0 (CI upper < 0.05)
+  **AND** falls → 0 (CI upper < 1 fall/ep) — the absorbing do-nothing diagnostic — while
+  **return-matched** `sparse-none` on the same cell stays ALIVE (success > 0 AND
+  falls > 0). Required in **≥ 5/6 cells**. *Falsify:* falls stay > 0 under penalty-none ⇒
+  "slow learning," not freeze.
+- **Rescue:** confirmed iff `penalty-{e3b,noveld}` success ≥ 0.5 × `sparse-{e3b,noveld}`
+  (CI lower > 0) on the cells that froze.
+- **Re-inflation (F3, the instrument leg):** `eff_rm_size(penalty-none) → 1` (collapse to
+  the trivial 1-state machine; CI upper < 2), and `penalty-e3b ≫ 1` (CI-separated above
+  both penalty-none and 1). Validated end-to-end on register envs (TinyReproduce /
+  Autoencode) where the exact minimal RM is `info['rm_state']` ground truth.
+- **Mealy–Moore keystone / PBIM=none (F4):** the recovered-benefit fraction
+  `ρ = (pbim−none)/(e3b−none)` (on success **and** on eff-RM-size), per cell, bootstrap
+  CI. **Confirmed iff ρ ≈ 0** (CI upper < 0.25 — PBIM recovers < ¼ of the bonus's
+  re-inflation), with the TOST "PBIM ≈ none" leg inside margin `δ_eq = 0.25·(e3b−none)`.
+  *Falsify:* ρ ≥ 0.75 (CI lower > 0.75) ⇒ a potential DOES re-inflate the realized RM ⇒
+  the Mealy–Moore keystone is wrong and we report it. **Validity guard (carry-over):** PBIM
+  telescoping `disc_sum` std/|mean| < 0.3 (Φ = V_int is a valid potential) — re-confirm on
+  the n=5 runs.
+- **Conjunctive necessity (C3/F5):** confirmed iff **Memoryless floors everywhere**
+  (`Memoryless+e3b ≤ Memoryless+none`, CI) AND no cell's success under `none` exceeds the
+  Memoryless+none CI, with the registered datum that **Memoryless+e3b moves maximally
+  (highest falls) yet succeeds 0** = coverage without memory to realize the RM.
+- **Catalyst-shape (F6):** which bonus rescues **matches task geometry** — NovelD carries
+  S13-view3, E3B carries MysteryPath; the **noveld ≥ e3b reversal on S13** is the
+  registered prediction. Reported as it falls.
+- **K4 optimality (DP, see §A.4):** `optimal_prober.py` returns `V* > 0` at −0.008 (CI/grid
+  over maze sizes) ⇒ freezing is strictly sub-optimal under the *specified* reward ⇒ the
+  pathology framing holds. The pathology claim uses **only −0.008**; −0.1 is a *separate*
+  rational-freeze regime, never folded in.
+
+### A.4 The four kill-criteria (thresholds AND passing results stated)
+
+All four are **PASS at n=5**. Each is pre-registered as a binary gate; the result is
+stated so the file is auditable post-unblinding.
+
+| # | Kill-criterion (threshold) | Result (PASS) |
+|---|---|---|
+| **K1** | **Freeze.** `penalty(−0.008)-none`: success ≈ 0 AND falls ≈ 0 in ≥ 5/6 cells, while return-matched `sparse-none` stays alive. | **PASS — 6/6 cells:** penalty-none success 0.00 AND falls 0.0 (absorbing do-nothing). Return-matched `sparse-none` ALIVE: success .16–.20, falls 9–39. |
+| **K2** | **Mealy–Moore keystone.** A policy-invariant potential does NOT re-inflate the realized RM: `ρ = (pbim−none)/(e3b−none) ≈ 0`. | **PASS — ρ = 0:** `penalty-PBIM` success 0.00 / falls 0.0 = IDENTICAL to none = still frozen; PBIM ≈ none on sparse too (sparse-pbim ≈ 0 vs sparse-e3b .21–.69). PBIM verified a valid telescoping potential (disc_sum std/\|mean\| 0.00–0.27). |
+| **K3** | **Instrument separates.** Behavioral eff-RM-size distinguishes collapse from re-inflation (penalty-none → ~1, penalty-e3b ≫ 1). | **PASS** (20M GatedDeltaNet snapshots via `rm_coverage`): penalty-none eff-RM-size **1.00**, penalty-e3b **13.14**, sparse-none **6.98**. The penalty collapses the RM to 1; the non-potential bonus re-inflates to 13. |
+| **K4** | **DP optimality gap.** Exact corridor-POMDP DP: `V* > 0` at −0.008 ⇒ freezing strictly sub-optimal under the specified reward; locate freeze threshold p̄ ≪ −0.008. | **PASS — V\* = 0.76 > 0** (do-nothing = 0); E[falls\|π\*] = 30, P1 ε = \|p\|·E[falls] = 0.24; freeze threshold **p̄ = −0.033** (the penalty must be ~4× harsher for freezing to be optimal). Robust across maze sizes. |
+
+### A.5 Instruments of record
+
+- **`memrl/probes/rm_coverage.py`** — the confound-free behavioral instrument: on-policy
+  eff-RM-size + `idle_frac` (rolls the agent's own deterministic policy; no teacher
+  forcing, no frozen-state decode). **Carries K1/K3.** Register envs use exact
+  `info['rm_state']`; MysteryPath uses the behavioral path/off-path knowledge-grid proxy
+  named by `theory_v2`.
+- **`memrl/probes/optimal_prober.py`** — corridor-POMDP exact DP. **Carries K4.**
+- **`memrl/probes/decode_memory.py`** — hardened decode probe (shuffled-label floor, MLP,
+  obs-baseline, play-phase, random-init floor). **CAUTIONARY METHODS RESULT ONLY** — never
+  a primary/supporting metric (§A.0 item 1).
+
+### A.6 Novelty deltas (locked positioning)
+
+- **vs BAMDP-Shaping (Lidayan–Dennis–Russell, ICLR 2025):** they decompose a *fixed*
+  reward into potential + non-potential; **PBIM = none is THEIR prediction**, so it is our
+  **control**, not headline. They have no penalty-sealing / freeze prediction and reason
+  about value functions, not reward machines.
+- **vs Ni 2023 (NeurIPS):** they show memory ⊥ credit-assignment for a *fixed* reward; we
+  **couple** them by editing the *realized* RM.
+- **vs reward-machine RL (Toro Icarte 2018; JAIR 2022):** they **assume the RM is GIVEN**
+  and inject it; we run it **in reverse** — the RM is *emergent* (the realized-reward
+  automaton) and we **measure** it collapse / re-inflate.
+- **vs NLP-probing (Hewitt–Liang 2019; Elazar 2021; Belinkov 2022):** we **retire** our
+  decode probe (it is their thesis, and weaker in our correlational form) and keep it only
+  as a cautionary methods result.

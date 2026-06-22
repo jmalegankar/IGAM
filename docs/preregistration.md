@@ -1,5 +1,15 @@
 # Pre-registration — "Exploration Bonuses and Recurrent Memory" (AAAI)
 
+> **RE-FILED 2026-06-21 — see `paper_skeleton.md` § "Appendix A. Pre-registration
+> (re-filed)".** This file's headline (the freeze fixed point) and its mechanism leg
+> (S1 "behavioral, not representational," carried by the decode / lag-Δ retention probe —
+> §3 S1b/S1c, §7 item 3) are **superseded**. The decode probe was shown to measure
+> copy-capacity, not learned memory (random-init untrained nets decode ≈ as much as
+> trained, because it is teacher-forced) and is **retired** to a cautionary methods result.
+> The headline moved from freeze-only to the **realized reward-machine** thesis. Per this
+> file's own §0 honesty rider, that move is documented here, not silent. Read Appendix A
+> for the governing registration; everything below is retained for provenance.
+
 **Filed 2026-06-16, BEFORE unblinding the n=5 post-fix grid.** Companion to
 `experiment_plan_v2.md` (§3 decision rules, §7 stub — this document supersedes and
 locks §7), `theory_v2_memory_training.md`, `project_aaai_review_findings`.
