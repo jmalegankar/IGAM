@@ -58,6 +58,14 @@ def rollout_coverage(policy, env, n_episodes: int, idle_action: int = 0,
     idle-fraction, and success. Returns aggregated means + per-episode arrays."""
     raw = _unwrap(env)
     is_mp = hasattr(raw, "mystery_path")
+    # SearingSpotlights has no emitted rm_state and no knowledge grid; its freeze
+    # signal is MOVEMENT — a frozen agent stays at spawn, an active one roams. We use
+    # distinct discretized agent positions (agent.rect.center) as the realized-coverage
+    # proxy: frozen → ~1 position, active → many. (NOT the literal RM, which for SS is
+    # the dead-reckoning belief; it is the behavioral did-it-freeze read.)
+    is_ss = (not is_mp) and hasattr(getattr(raw, "agent", None), "rect")
+    ss_bucket = max(1, int(getattr(raw, "screen_dim", 96)) // 12) if is_ss else 1
+    coverage_kind = "mp_knowledge" if is_mp else ("ss_position" if is_ss else "exact_rm")
 
     rm_sizes, idle_fracs, succs, ep_lens = [], [], [], []
     obs = env.reset()
@@ -78,17 +86,22 @@ def rollout_coverage(policy, env, n_episodes: int, idle_action: int = 0,
             if 0 <= ax < grid_dim and 0 <= ay < grid_dim:
                 knowledge[ax, ay] = 1 if (ax, ay) in path else -1
             rm_states.add(knowledge.tobytes())               # realized RM-state proxy
+        elif is_ss:
+            cx, cy = _unwrap(env).agent.rect.center           # movement-coverage proxy
+            rm_states.add((int(cx) // ss_bucket, int(cy) // ss_bucket))
 
         o = torch.as_tensor(np.asarray(obs, dtype=np.float32), device=device)
         es = torch.as_tensor([first], device=device)
         act, cell_state = _det_action(policy, o, cell_state, es)
         first = False
-        idle += int(int(act[0]) == idle_action)
+        # idle = the no-op: a scalar Discrete action == idle_action, or ALL components
+        # of a MultiDiscrete action == idle_action (no movement/rotation).
+        idle += int(bool(np.all(np.asarray(act[0]) == idle_action)))
         steps += 1
 
         obs, _, dones, infos = env.step(act)
         info0 = infos[0] if isinstance(infos, (list, tuple)) else infos
-        if not is_mp:
+        if not is_mp and not is_ss:
             rm_states.add(tuple(info0.get("rm_state", ())))   # exact RM state
         succ = max(succ, float(info0.get("is_success", 0.0)) if "is_success" in info0
                    else float(info0.get("success", 0.0)))
@@ -107,7 +120,8 @@ def rollout_coverage(policy, env, n_episodes: int, idle_action: int = 0,
     def m(a): return float(np.mean(a)) if a else None
     return {"eff_rm_size": m(rm_sizes), "eff_rm_size_std": (float(np.std(rm_sizes)) if rm_sizes else None),
             "idle_frac": m(idle_fracs), "success": m(succs), "ep_len": m(ep_lens),
-            "n_episodes": len(rm_sizes), "is_mysterypath": bool(is_mp)}
+            "n_episodes": len(rm_sizes), "coverage_kind": coverage_kind,
+            "is_mysterypath": bool(is_mp)}
 
 
 def main():
