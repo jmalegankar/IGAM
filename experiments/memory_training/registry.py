@@ -174,7 +174,9 @@ CORE = [
            # optimal +1 in BOTH). See memrl/envs/miniworld_wrappers.py.
            [Density("sparse",  env_kwargs={"reward_wrong": 0.0}),
             Density("penalty", env_kwargs={"reward_wrong": -1.0})],
-           10_000_000,
+           20_000_000,                          # match the MysteryPath headline budget +
+                                                # get the 20M snapshot; freeze must be the
+                                                # CONVERGED fixed point, not slow learning
            "3D EGOCENTRIC PIXELS (60×80×3 → NatureCNN) · generality of the SEALING-PENALTY "
            "phenomenon beyond gridworlds: penalty-none should FREEZE (success→0, committed→0 "
            "= retreats to the timeout sanctuary), the return-matched sparse twin stays ALIVE, "

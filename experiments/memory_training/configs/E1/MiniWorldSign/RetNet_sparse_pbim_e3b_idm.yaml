@@ -2,7 +2,7 @@ env_name: MiniWorld-Sign-v0
 env_kwargs:
   reward_wrong: 0.0
 n_envs: 8
-total_timesteps: 10000000
+total_timesteps: 20000000
 seed: 0
 cell:
   name: RetNet
