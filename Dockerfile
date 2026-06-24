@@ -39,12 +39,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ── System deps ─────────────────────────────────────────────────────────────
 # git: to clone. libgl1/libglib2.0-0: pulled in by some gymnasium/minigrid
-# render paths; cheap insurance against import-time failures (training itself
-# does not render).
+# render paths; cheap insurance against import-time failures.
+# xvfb + libglu1-mesa + libgl1-mesa-dri: MiniWorld renders every step via pyglet<2.0,
+# which needs a real GL context. On headless pods miniworld_wrappers.py starts a
+# virtual X server (Xvfb) via pyvirtualdisplay; the Mesa DRI drivers give it a
+# software GL context. Inert for the non-pixel / non-MiniWorld runs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         libgl1 \
         libglib2.0-0 \
+        xvfb \
+        libglu1-mesa \
+        libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
@@ -79,6 +85,13 @@ RUN python -m pip install --upgrade pip \
 RUN python -m pip install "pygame>=2.6" \
  && python -m pip install memory-gym --no-deps
 
+# ── MiniWorld-Sign (3D egocentric pixel memory env — the sealing-penalty generality
+# slice) ─────────────────────────────────────────────────────────────────────────
+# Lazy-imported (only for MiniWorld-* ids). Pins pyglet<2.0, so on headless pods
+# memrl/envs/miniworld_wrappers.py auto-starts Xvfb via pyvirtualdisplay (xvfb +
+# Mesa installed above). Inert for every other env.
+RUN python -m pip install ".[miniworld]"
+
 # ── Runtime knobs the run_*.sh scripts read (all overridable at `docker run`) ─
 #   PYTHON   : no .venv in the image, so use the container interpreter.
 #   DEVICE   : GPU by default; set DEVICE=cpu for a smoke test.
@@ -92,6 +105,13 @@ ENV PYTHON=python \
 
 # Sanity: fail the build if the package / required libs don't import.
 RUN python -c "import memrl, train, minigrid, wandb, stable_baselines3, memory_gym; print('imports OK')"
+
+# Sanity: validate the FULL headless MiniWorld render path at build time (Xvfb +
+# pyvirtualdisplay + Mesa GL + the wrapper). NON-fatal on purpose: a MiniWorld-only
+# GL hiccup must not block the image that also serves every other env — it just logs
+# a clear warning so MiniWorldSign jobs are debugged before launch.
+RUN python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniWorld-Sign-v0', n_envs=1); e.reset(); print('miniworld headless OK')" \
+ || echo "WARNING: MiniWorld headless render check FAILED at build — non-MiniWorld runs are unaffected; debug the GL/xvfb stack before launching MiniWorldSign jobs."
 
 # Default command: run the full sweep (cells serial, seeds parallel within each).
 # Override with a per-cell script for one-pod-per-cell scheduling, e.g.:

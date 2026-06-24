@@ -31,6 +31,10 @@ wandb = [
 memory-gym = [
     "memory-gym",
 ]
+miniworld = [
+    "miniworld==2.1.0",      # 3D egocentric pixel memory env (MiniWorld-Sign)
+    "pyvirtualdisplay",      # headless X for pyglet<2.0 on k8s pods (see miniworld_wrappers)
+]
 popgym-arcade = [
     "popgym-arcade",
     "jax",

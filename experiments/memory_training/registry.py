@@ -166,6 +166,23 @@ CORE = [
             Density("anti", env_kwargs={"reset_options": {"reward_inside_spotlight": -0.008}})],
            10_000_000,
            "α<0 hazard · no-sanctuary freeze boundary (anti-none should NOT freeze)"),
+    EnvArm("MiniWorldSign", "MiniWorld-Sign-v0", "memrl-memtrain-miniworld", SIX,
+           ["none", "e3b_idm", "pbim_e3b_idm"],
+           # MiniWorld-Sign's stock reward IS float(correct)*2-1 = +1 correct / -1 wrong
+           # object / 0 timeout, i.e. an avoidable penalty with a 0-cost timeout sanctuary.
+           # penalty = stock (-1, freeze-capable); sparse = wrong→0 (return-matched twin,
+           # optimal +1 in BOTH). See memrl/envs/miniworld_wrappers.py.
+           [Density("sparse",  env_kwargs={"reward_wrong": 0.0}),
+            Density("penalty", env_kwargs={"reward_wrong": -1.0})],
+           10_000_000,
+           "3D EGOCENTRIC PIXELS (60×80×3 → NatureCNN) · generality of the SEALING-PENALTY "
+           "phenomenon beyond gridworlds: penalty-none should FREEZE (success→0, committed→0 "
+           "= retreats to the timeout sanctuary), the return-matched sparse twin stays ALIVE, "
+           "a non-potential bonus (e3b) rescues, PBIM (potential) should not (ρ=0); "
+           "conjunctive necessity (Memoryless cannot solve) in 3D pixels",
+           seeds=[0, 1, 2],
+           # pixel CNN on CPU (pyglet) — fewer parallel envs than the gridworld grid.
+           hp={"n_envs": 8}),
 ]
 
 # ── method studies (vary a non-env axis) ────────────────────────────────────
