@@ -326,7 +326,9 @@ class EpisodeInfoCallback(BaseCallback):
     def __init__(self, keys: tuple[str, ...] = ("success", "num_fails",
                                                 "commands_completed",
                                                 "coins_collected",
-                                                "agent_health")) -> None:
+                                                "agent_health",
+                                                "is_success",   # rollout-side success
+                                                "committed")) -> None:  # MiniWorld freeze diag
         super().__init__()
         self._keys = keys
 

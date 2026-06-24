@@ -157,6 +157,11 @@ def make_miniworld_vec_env(
         def _init():
             env = gym.make(env_name, max_episode_steps=max_episode_steps,
                            size=size, goal=goal)
+            # gym.make's max_episode_steps only configures the OUTER TimeLimit;
+            # MiniWorldEnv has its OWN internal step cap (Sign.__init__ default = 20)
+            # that truncates FIRST. Override it so episodes actually run the full
+            # navigate→read→retain horizon (else the stock 20 steps neuter the memory task).
+            env.unwrapped.max_episode_steps = int(max_episode_steps)
             env = SignMemoryWrapper(env, n_colors=n_colors, seed=seed + rank,
                                     reward_wrong=reward_wrong)
             env.reset(seed=seed + rank)

@@ -167,7 +167,15 @@ CORE = [
            10_000_000,
            "α<0 hazard · no-sanctuary freeze boundary (anti-none should NOT freeze)"),
     EnvArm("MiniWorldSign", "MiniWorld-Sign-v0", "memrl-memtrain-miniworld", SIX,
-           ["none", "e3b_idm", "pbim_e3b_idm"],
+           # NovelD (RND-based, non-potential), NOT e3b_idm: on MiniWorld's egocentric
+           # frames inverse-dynamics is trivial (idm_acc→1), so the E3B-IDM φ norm
+           # explodes → the elliptical bonus exceeds reject_threshold every step →
+           # skip_frac=1, the ellipsoid never updates (verified: b_max 1.6e9 vs a healthy
+           # MysteryPath ~5e2–2e4). NovelD has no IDM/ellipsoid, is pixel-proven here
+           # (it rescues MysteryPath-penalty), and matches this env's cue-finding geometry
+           # (like S13, where NovelD is THE catalyst). The e3b-vs-PBIM keystone stays on
+           # MysteryPath (n=5); MiniWorld carries freeze + non-potential rescue in 3D.
+           ["none", "noveld"],
            # MiniWorld-Sign's stock reward IS float(correct)*2-1 = +1 correct / -1 wrong
            # object / 0 timeout, i.e. an avoidable penalty with a 0-cost timeout sanctuary.
            # penalty = stock (-1, freeze-capable); sparse = wrong→0 (return-matched twin,
@@ -180,8 +188,8 @@ CORE = [
            "3D EGOCENTRIC PIXELS (60×80×3 → NatureCNN) · generality of the SEALING-PENALTY "
            "phenomenon beyond gridworlds: penalty-none should FREEZE (success→0, committed→0 "
            "= retreats to the timeout sanctuary), the return-matched sparse twin stays ALIVE, "
-           "a non-potential bonus (e3b) rescues, PBIM (potential) should not (ρ=0); "
-           "conjunctive necessity (Memoryless cannot solve) in 3D pixels",
+           "the non-potential bonus (NovelD) rescues; conjunctive necessity (Memoryless "
+           "cannot solve) in 3D pixels. e3b-vs-PBIM keystone lives on MysteryPath.",
            seeds=[0, 1, 2],
            # pixel CNN on CPU (pyglet) — fewer parallel envs than the gridworld grid.
            hp={"n_envs": 8}),
