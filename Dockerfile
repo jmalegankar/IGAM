@@ -106,12 +106,19 @@ ENV PYTHON=python \
 # Sanity: fail the build if the package / required libs don't import.
 RUN python -c "import memrl, train, minigrid, wandb, stable_baselines3, memory_gym; print('imports OK')"
 
-# Sanity: validate the FULL headless MiniWorld render path at build time (Xvfb +
-# pyvirtualdisplay + Mesa GL + the wrapper). NON-fatal on purpose: a MiniWorld-only
-# GL hiccup must not block the image that also serves every other env — it just logs
-# a clear warning so MiniWorldSign jobs are debugged before launch.
-RUN python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniWorld-Sign-v0', n_envs=1); e.reset(); print('miniworld headless OK')" \
- || echo "WARNING: MiniWorld headless render check FAILED at build — non-MiniWorld runs are unaffected; debug the GL/xvfb stack before launching MiniWorldSign jobs."
+# Sanity: validate the FULL headless MiniWorld render path at build time (lazy-import
+# ordering + Xvfb + pyvirtualdisplay + Mesa GL + the wrapper). FATAL: now that the
+# import ordering is fixed, a failure here means the headless GL stack is genuinely
+# broken (missing xvfb / pyvirtualdisplay / Mesa, or a render fault) — fail the build
+# LOUDLY rather than ship an image that crashes at runtime on the cluster (exactly what
+# a missed non-fatal warning let happen). Override for an environment whose build-time
+# GL differs from runtime (e.g. EGL-only nodes): --build-arg SKIP_MINIWORLD_CHECK=1.
+ARG SKIP_MINIWORLD_CHECK=0
+RUN if [ "$SKIP_MINIWORLD_CHECK" = "1" ]; then \
+        echo "SKIP_MINIWORLD_CHECK=1 → skipping the MiniWorld headless render check"; \
+    else \
+        python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniWorld-Sign-v0', n_envs=1); e.reset(); print('miniworld headless OK')"; \
+    fi
 
 # Default command: run the full sweep (cells serial, seeds parallel within each).
 # Override with a per-cell script for one-pod-per-cell scheduling, e.g.:

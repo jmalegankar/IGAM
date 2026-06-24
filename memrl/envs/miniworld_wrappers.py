@@ -32,37 +32,53 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
 
 import gymnasium as gym
 import numpy as np
 
-import miniworld  # noqa: F401 — registers MiniWorld-* ids with gymnasium
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv
 
-# miniworld pins pyglet<2.0 (the old GL stack), which needs a real X display to make
-# a GL context — there is no clean EGL-headless mode. On a headless Linux pod (k8s)
-# there is no DISPLAY, so we lazily start a virtual X server (Xvfb via pyvirtualdisplay)
-# the first time a MiniWorld env is built. No-op on macOS (Cocoa backend) and no-op
-# when a DISPLAY already exists (your local machine, or `xvfb-run`). Kept in a module
-# global so the Xvfb process is not garbage-collected mid-run.
+# CRITICAL: do NOT `import miniworld` at module top. It eagerly imports pyglet.gl,
+# which creates an X "shadow window" AT IMPORT TIME; on a headless pod (no DISPLAY)
+# that raises NoSuchDisplayException before any of our code can run (the import line
+# itself blows up). We instead set up a headless GL backend FIRST and import miniworld
+# lazily inside make_miniworld_vec_env, AFTER the backend is ready.
 _VIRTUAL_DISPLAY = None
+_HEADLESS_READY = False
 
 
-def _ensure_headless_display() -> None:
-    global _VIRTUAL_DISPLAY
-    if (sys.platform != "linux" or os.environ.get("DISPLAY")
-            or _VIRTUAL_DISPLAY is not None):
+def _ensure_headless_gl() -> None:
+    """Let pyglet<2.0 create a GL context with no X display. No-op on macOS (Cocoa)
+    or when a DISPLAY already exists. MUST run BEFORE `import miniworld`.
+
+    Backend via env var MINIWORLD_RENDER:
+      - "xvfb" (default): virtual X server (Xvfb via pyvirtualdisplay) + Mesa software
+        GL. Reliable, CPU-rendered. Needs `xvfb` + `pyvirtualdisplay` (baked into image).
+      - "egl": pyglet headless via EGL — GPU-accelerated on a CUDA node, no Xvfb. Opt in
+        once EGL libs (libEGL) are confirmed present; falls back to Xvfb on failure.
+    """
+    global _VIRTUAL_DISPLAY, _HEADLESS_READY
+    if _HEADLESS_READY or sys.platform != "linux" or os.environ.get("DISPLAY"):
         return
+    if os.environ.get("MINIWORLD_RENDER", "xvfb").lower() == "egl":
+        try:
+            import pyglet
+            pyglet.options["headless"] = True       # EGL; must precede pyglet.window
+            _HEADLESS_READY = True
+            return
+        except Exception as e:                       # pragma: no cover
+            warnings.warn(f"MiniWorld EGL headless init failed ({e}); using Xvfb.")
     try:
         from pyvirtualdisplay import Display
         _VIRTUAL_DISPLAY = Display(visible=False, size=(1024, 768))
         _VIRTUAL_DISPLAY.start()                     # sets os.environ["DISPLAY"]
+        _HEADLESS_READY = True
     except Exception as e:                            # pragma: no cover
-        import warnings
         warnings.warn(
-            f"MiniWorld headless display setup failed ({e}); falling back to any "
-            "existing DISPLAY / xvfb-run / EGL. Install `xvfb` + `pyvirtualdisplay`."
+            f"MiniWorld headless GL setup failed ({e}). Need `xvfb`+`pyvirtualdisplay` "
+            "(default) or MINIWORLD_RENDER=egl with EGL libs. Rendering will crash."
         )
 
 
@@ -151,7 +167,8 @@ def make_miniworld_vec_env(
     if "Sign" not in env_name:
         raise ValueError(f"only MiniWorld-Sign-v0 is wired; got {env_name!r}")
 
-    _ensure_headless_display()   # start a virtual X server on headless Linux (no-op else)
+    _ensure_headless_gl()        # headless GL backend BEFORE importing miniworld (no-op on mac)
+    import miniworld  # noqa: F401 — registers MiniWorld-* ids; pyglet GL now headless-safe
 
     def _make_one(rank: int):
         def _init():
