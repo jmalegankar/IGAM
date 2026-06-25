@@ -31,7 +31,7 @@ FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 # ── Which repo / ref to bake in ─────────────────────────────────────────────
 ARG REPO_URL=https://github.com/jmalegankar/IGAM.git
-ARG GIT_REF=main
+ARG GIT_REF=gated-lmu
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -41,12 +41,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # git: to clone. libgl1/libglib2.0-0: pulled in by some gymnasium/minigrid
 # render paths; cheap insurance against import-time failures.
 # MiniWorld renders every step via pyglet<2.0, which needs a real GL context.
-# miniworld_wrappers._ensure_headless_gl() (MINIWORLD_RENDER=auto) prefers GPU EGL
-# when its loader is present — libegl1/libgles2 are that loader (the NVIDIA driver
-# supplies the implementation at runtime on the GPU node); EGL is faster and far more
-# stable than software GL with many contexts. Fallback is Xvfb (xvfb + pyvirtualdisplay)
-# over Mesa software GL (libglu1-mesa + libgl1-mesa-dri = llvmpipe). Inert for the
-# non-pixel / non-MiniWorld runs.
+# miniworld_wrappers._ensure_headless_gl() defaults to software Xvfb (xvfb +
+# pyvirtualdisplay over Mesa libglu1-mesa + libgl1-mesa-dri = llvmpipe), which works
+# without a GPU so the build can validate it. The cluster runs set MINIWORLD_RENDER=egl
+# (k8s job template) to render on the GPU instead — far more stable + faster than
+# software GL with many contexts. libegl1/libgles2 + libgbm-dev are the EGL/GBM path
+# (the NVIDIA driver supplies the implementation at runtime). Inert for non-MiniWorld runs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         libgl1 \
@@ -56,6 +56,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1-mesa-dri \
         libegl1 \
         libgles2 \
+        libgl1-mesa-dev \
+        libegl1-mesa-dev \
+        libgbm-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
