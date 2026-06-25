@@ -40,10 +40,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # ── System deps ─────────────────────────────────────────────────────────────
 # git: to clone. libgl1/libglib2.0-0: pulled in by some gymnasium/minigrid
 # render paths; cheap insurance against import-time failures.
-# xvfb + libglu1-mesa + libgl1-mesa-dri: MiniWorld renders every step via pyglet<2.0,
-# which needs a real GL context. On headless pods miniworld_wrappers.py starts a
-# virtual X server (Xvfb) via pyvirtualdisplay; the Mesa DRI drivers give it a
-# software GL context. Inert for the non-pixel / non-MiniWorld runs.
+# MiniWorld renders every step via pyglet<2.0, which needs a real GL context.
+# miniworld_wrappers._ensure_headless_gl() (MINIWORLD_RENDER=auto) prefers GPU EGL
+# when its loader is present — libegl1/libgles2 are that loader (the NVIDIA driver
+# supplies the implementation at runtime on the GPU node); EGL is faster and far more
+# stable than software GL with many contexts. Fallback is Xvfb (xvfb + pyvirtualdisplay)
+# over Mesa software GL (libglu1-mesa + libgl1-mesa-dri = llvmpipe). Inert for the
+# non-pixel / non-MiniWorld runs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         libgl1 \
@@ -51,6 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb \
         libglu1-mesa \
         libgl1-mesa-dri \
+        libegl1 \
+        libgles2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

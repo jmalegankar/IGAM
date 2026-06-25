@@ -62,7 +62,14 @@ def _ensure_headless_gl() -> None:
     global _VIRTUAL_DISPLAY, _HEADLESS_READY
     if _HEADLESS_READY or sys.platform != "linux" or os.environ.get("DISPLAY"):
         return
-    if os.environ.get("MINIWORLD_RENDER", "xvfb").lower() == "egl":
+    # Default to (hardened) Xvfb: it works without a GPU, so the GPU-less Docker BUILD
+    # sandbox can validate it. EGL is opt-in (MINIWORLD_RENDER=egl) — GPU-rendered and
+    # far more stable than software GL with many contexts, but it needs a real GPU
+    # device, so we never auto-select it (the build would fail; and an EGL context
+    # fault happens at `import miniworld`, after this function, so it can't be caught
+    # and fall back here). Confirm EGL works on the node, THEN set MINIWORLD_RENDER=egl.
+    mode = os.environ.get("MINIWORLD_RENDER", "xvfb").lower()
+    if mode == "egl":
         try:
             import pyglet
             pyglet.options["headless"] = True       # EGL; must precede pyglet.window
@@ -70,6 +77,12 @@ def _ensure_headless_gl() -> None:
             return
         except Exception as e:                       # pragma: no cover
             warnings.warn(f"MiniWorld EGL headless init failed ({e}); using Xvfb.")
+    # Xvfb + Mesa software GL fallback. Force single-threaded llvmpipe: multi-threaded
+    # Mesa with many simultaneous GL contexts is the usual headless segfault source.
+    os.environ.setdefault("GALLIUM_DRIVER", "llvmpipe")
+    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+    os.environ.setdefault("LP_NUM_THREADS", "1")
+    os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
     try:
         from pyvirtualdisplay import Display
         _VIRTUAL_DISPLAY = Display(visible=False, size=(1024, 768))
