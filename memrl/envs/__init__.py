@@ -18,6 +18,7 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
     Routing:
         ``popgym-arcade-*``       → popgym-arcade (gymnax/JAX backend)
         ``popgym-*``              → popgym (gymnasium)
+        ``MiniHack-*``            → minihack (NLE; Memento/Corridor memory tasks)
         ``MiniGrid-*``            → minigrid
         ``TMaze-*``               → T-Maze (Passive/Active, Ni et al. 2023)
         ``POMDP-*`` / classic ids → classic-control (CartPole-v1, masked POMDP)
@@ -40,9 +41,9 @@ def make_vec_env(env_name: str, n_envs: int = 8, seed: int = 0, **kwargs):
     if env_name.startswith("TinyReproduce"):
         from .tiny_reproduce import make_tiny_reproduce_vec_env
         return make_tiny_reproduce_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
-    if env_name.startswith("MiniWorld-"):
-        from .miniworld_wrappers import make_miniworld_vec_env
-        return make_miniworld_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
+    if env_name.startswith("MiniHack-"):
+        from .minihack_wrappers import make_minihack_vec_env
+        return make_minihack_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("MiniGrid-"):
         return make_minigrid_vec_env(env_name, n_envs=n_envs, seed=seed, **kwargs)
     if env_name.startswith("TMaze-"):

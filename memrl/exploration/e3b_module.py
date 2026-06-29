@@ -39,6 +39,7 @@ class E3B(IntrinsicRewardModule):
         lambda_reg: float = 1.0,
         max_bonus: float = 10.0,
         normalize: bool = True,
+        normalize_phi: bool = False,
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__(n_envs=n_envs, device=device)
@@ -49,6 +50,8 @@ class E3B(IntrinsicRewardModule):
             lambda_reg=lambda_reg,
             device=device,
             max_bonus=max_bonus * 10.0,   # we'll re-clip after normalize
+            normalize_phi=normalize_phi,  # L2-normalize φ → b∈[0,1/λ]; REQUIRED on envs
+                                          # where φ explodes (e.g. raw-pixel IDM)
         )
         self.normalize = normalize
         self.rms = RunningStd() if normalize else None
@@ -128,6 +131,7 @@ class E3BIDM(E3B):
         lambda_reg: float = 1.0,
         max_bonus: float = 10.0,
         normalize: bool = True,
+        normalize_phi: bool = False,
         action_dims: Sequence[int] | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
@@ -135,7 +139,8 @@ class E3BIDM(E3B):
                      feature_dim=feature_dim, device=device)
         super().__init__(
             n_envs=n_envs, phi_source=phi, lambda_reg=lambda_reg,
-            max_bonus=max_bonus, normalize=normalize, device=device,
+            max_bonus=max_bonus, normalize=normalize,
+            normalize_phi=normalize_phi, device=device,
         )
         self.obs_dim = obs_dim
         self.n_actions = int(n_actions)

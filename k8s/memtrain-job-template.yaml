@@ -48,12 +48,6 @@ spec:
             - { name: WANDB_INIT_TIMEOUT, value: "120" }             # tolerate slow init under burst
             - { name: WANDB_HTTP_TIMEOUT, value: "60" }
             - { name: WANDB_X_STATS_SAMPLING_INTERVAL, value: "300" } # system stats every 5 min (was 2s default)
-            # MiniWorld renders on the GPU via headless EGL (far more stable + faster
-            # than software Xvfb/llvmpipe, which segfaults with many GL contexts). Read
-            # ONLY by memrl/envs/miniworld_wrappers.py → inert for every non-MiniWorld
-            # env. Runtime-only (the GPU-less Docker BUILD still uses the Xvfb default,
-            # so the fatal build check passes). Set to "xvfb" to force software GL.
-            - { name: MINIWORLD_RENDER, value: "egl" }
           # ── EDIT RESOURCES HERE (by hand) ─────────────────────────────────
           # Tip: keep NO cpu limit — a cpu limit (CFS quota) throttles every
           # thread at the cap, including wandb's heartbeat → the same starvation

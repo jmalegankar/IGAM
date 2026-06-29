@@ -38,27 +38,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 # ── System deps ─────────────────────────────────────────────────────────────
-# git: to clone. libgl1/libglib2.0-0: pulled in by some gymnasium/minigrid
-# render paths; cheap insurance against import-time failures.
-# MiniWorld renders every step via pyglet<2.0, which needs a real GL context.
-# miniworld_wrappers._ensure_headless_gl() defaults to software Xvfb (xvfb +
-# pyvirtualdisplay over Mesa libglu1-mesa + libgl1-mesa-dri = llvmpipe), which works
-# without a GPU so the build can validate it. The cluster runs set MINIWORLD_RENDER=egl
-# (k8s job template) to render on the GPU instead — far more stable + faster than
-# software GL with many contexts. libegl1/libgles2 + libgbm-dev are the EGL/GBM path
-# (the NVIDIA driver supplies the implementation at runtime). Inert for non-MiniWorld runs.
+# git: to clone. libgl1/libglib2.0-0: pulled in by some gymnasium/minigrid render
+# paths; cheap insurance against import-time failures.
+# cmake/build-essential/libbz2-dev/flex/bison: MiniHack pulls `nle` (NetHack Learning
+# Env), which BUILDS NetHack from C++ source at pip-install time. CPU-only, no display.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         libgl1 \
         libglib2.0-0 \
-        xvfb \
-        libglu1-mesa \
-        libgl1-mesa-dri \
-        libegl1 \
-        libgles2 \
-        libgl1-mesa-dev \
-        libegl1-mesa-dev \
-        libgbm-dev \
+        cmake \
+        build-essential \
+        libbz2-dev \
+        flex \
+        bison \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
@@ -93,12 +85,12 @@ RUN python -m pip install --upgrade pip \
 RUN python -m pip install "pygame>=2.6" \
  && python -m pip install memory-gym --no-deps
 
-# ── MiniWorld-Sign (3D egocentric pixel memory env — the sealing-penalty generality
-# slice) ─────────────────────────────────────────────────────────────────────────
-# Lazy-imported (only for MiniWorld-* ids). Pins pyglet<2.0, so on headless pods
-# memrl/envs/miniworld_wrappers.py auto-starts Xvfb via pyvirtualdisplay (xvfb +
-# Mesa installed above). Inert for every other env.
-RUN python -m pip install ".[miniworld]"
+# ── MiniHack-Memento (E3B's benchmark; cue→retain→choose memory+exploration) ──
+# Lazy-imported (only for MiniHack-* ids). Pulls `nle` → builds NetHack from source
+# (cmake/build-essential installed above). CPU-only, no display/GL. NOTE: minihack
+# may pull a newer gymnasium; memory-gym is installed --no-deps above so its pin is
+# already decoupled.
+RUN python -m pip install ".[minihack]"
 
 # ── Runtime knobs the run_*.sh scripts read (all overridable at `docker run`) ─
 #   PYTHON   : no .venv in the image, so use the container interpreter.
@@ -114,19 +106,8 @@ ENV PYTHON=python \
 # Sanity: fail the build if the package / required libs don't import.
 RUN python -c "import memrl, train, minigrid, wandb, stable_baselines3, memory_gym; print('imports OK')"
 
-# Sanity: validate the FULL headless MiniWorld render path at build time (lazy-import
-# ordering + Xvfb + pyvirtualdisplay + Mesa GL + the wrapper). FATAL: now that the
-# import ordering is fixed, a failure here means the headless GL stack is genuinely
-# broken (missing xvfb / pyvirtualdisplay / Mesa, or a render fault) — fail the build
-# LOUDLY rather than ship an image that crashes at runtime on the cluster (exactly what
-# a missed non-fatal warning let happen). Override for an environment whose build-time
-# GL differs from runtime (e.g. EGL-only nodes): --build-arg SKIP_MINIWORLD_CHECK=1.
-ARG SKIP_MINIWORLD_CHECK=0
-RUN if [ "$SKIP_MINIWORLD_CHECK" = "1" ]; then \
-        echo "SKIP_MINIWORLD_CHECK=1 → skipping the MiniWorld headless render check"; \
-    else \
-        python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniWorld-Sign-v0', n_envs=1); e.reset(); print('miniworld headless OK')"; \
-    fi
+# Sanity: validate the MiniHack env path at build time (nle build + the wrapper).
+RUN python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniHack-Memento-F2-v0', n_envs=1); e.reset(); print('minihack OK')"
 
 # Default command: run the full sweep (cells serial, seeds parallel within each).
 # Override with a per-cell script for one-pod-per-cell scheduling, e.g.:

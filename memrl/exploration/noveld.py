@@ -32,16 +32,16 @@ class _EpisodicVisitationSet:
     def __init__(self, n_envs: int) -> None:
         self.sets: list[set] = [set() for _ in range(n_envs)]
 
-    def first_visit_then_mark(self, obs_arr: np.ndarray) -> np.ndarray:
-        """Return bool mask (n_envs,): True if obs is a first-visit, then mark."""
+    def first_visit_then_mark(self, keys: list) -> np.ndarray:
+        """Return bool mask (n_envs,): True if the per-env key is a first-visit, then mark.
+        `keys` is a list of hashable per-env keys — an obs byte-hash for discrete-grid envs,
+        or a discrete pose key (info["novelty_key"]) for continuous-state envs so the gate
+        saturates."""
         out = np.zeros(len(self.sets), dtype=bool)
-        # Hash via tobytes — works for any np-dtype obs.
-        flat = obs_arr.reshape(len(self.sets), -1)
-        for i in range(len(self.sets)):
-            key = flat[i].tobytes()
-            if key not in self.sets[i]:
+        for i, k in enumerate(keys):
+            if k not in self.sets[i]:
                 out[i] = True
-                self.sets[i].add(key)
+                self.sets[i].add(k)
         return out
 
     def reset_envs(self, env_ids) -> None:
@@ -86,13 +86,17 @@ class NovelD(IntrinsicRewardModule):
         self.rms = RunningStd()
 
         self.visits = _EpisodicVisitationSet(n_envs)
+        # Tell the PPO loop to pass `infos` into compute() so we can read a discrete
+        # env-provided novelty key (info["novelty_key"]) for the episodic gate.
+        self.wants_infos = True
 
     @torch.no_grad()
     def _rnd_err(self, x: Tensor) -> Tensor:
         return (self.predictor(x) - self.target(x)).pow(2).mean(dim=-1)
 
     @torch.no_grad()
-    def compute(self, obs, last_obs, action, episode_start, side, cell_state) -> np.ndarray:
+    def compute(self, obs, last_obs, action, episode_start, side, cell_state,
+                infos=None) -> np.ndarray:
         x_cur  = _obs_to_tensor(obs,      self.device)
         x_prev = _obs_to_tensor(last_obs, self.device)
         err_cur  = self._rnd_err(x_cur).cpu().numpy().astype(np.float32)
@@ -106,7 +110,17 @@ class NovelD(IntrinsicRewardModule):
         reset_ids = np.where(episode_start)[0].tolist()
         if reset_ids:
             self.visits.reset_envs(reset_ids)
-        first_visit_mask = self.visits.first_visit_then_mark(np.asarray(obs))
+        # Prefer a DISCRETE env-provided pose key (info["novelty_key"]) so the gate
+        # saturates on continuous-state envs; else hash the raw obs (correct
+        # for discrete-grid envs S13 / MysteryPath, whose frames are finite).
+        n = len(self.visits.sets)
+        if (infos is not None and len(infos) == n
+                and all(isinstance(inf, dict) and "novelty_key" in inf for inf in infos)):
+            keys = [infos[i]["novelty_key"] for i in range(n)]
+        else:
+            flat = np.asarray(obs).reshape(n, -1)
+            keys = [flat[i].tobytes() for i in range(n)]
+        first_visit_mask = self.visits.first_visit_then_mark(keys)
 
         bonus = diff * first_visit_mask.astype(np.float32)
 

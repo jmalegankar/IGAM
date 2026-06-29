@@ -310,14 +310,19 @@ class MemPPO(PPO):
                 done_ids = [i for i, d in enumerate(dones) if d]
                 if done_ids:
                     self.intrinsic_module.reset_envs(done_ids)
-                bonus = self.intrinsic_module.compute(
+                _compute_kw = dict(
                     obs=new_obs,
                     last_obs=self._last_obs,
                     action=actions_np,
                     episode_start=dones,
                     side=side,
                     cell_state=self._cell_state,
-                )                                                             # (n_envs,) np.float32
+                )
+                # Modules that opt in (NovelD) get the env infos so they can read a
+                # discrete novelty key (info["novelty_key"]) for the episodic gate.
+                if getattr(self.intrinsic_module, "wants_infos", False):
+                    _compute_kw["infos"] = infos
+                bonus = self.intrinsic_module.compute(**_compute_kw)           # (n_envs,) np.float32
                 # Done-step misattribution fix: on a done step VecEnv has already
                 # auto-reset, so new_obs[i] is the NEXT episode's first obs and the
                 # episodic module was just reset → bonus[i] is a fresh-ellipsoid

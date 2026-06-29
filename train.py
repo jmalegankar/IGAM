@@ -327,8 +327,7 @@ class EpisodeInfoCallback(BaseCallback):
                                                 "commands_completed",
                                                 "coins_collected",
                                                 "agent_health",
-                                                "is_success",   # rollout-side success
-                                                "committed")) -> None:  # MiniWorld freeze diag
+                                                "is_success")) -> None:  # rollout-side success
         super().__init__()
         self._keys = keys
 

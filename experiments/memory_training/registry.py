@@ -166,33 +166,18 @@ CORE = [
             Density("anti", env_kwargs={"reset_options": {"reward_inside_spotlight": -0.008}})],
            10_000_000,
            "α<0 hazard · no-sanctuary freeze boundary (anti-none should NOT freeze)"),
-    EnvArm("MiniWorldSign", "MiniWorld-Sign-v0", "memrl-memtrain-miniworld", SIX,
-           # NovelD (RND-based, non-potential), NOT e3b_idm: on MiniWorld's egocentric
-           # frames inverse-dynamics is trivial (idm_acc→1), so the E3B-IDM φ norm
-           # explodes → the elliptical bonus exceeds reject_threshold every step →
-           # skip_frac=1, the ellipsoid never updates (verified: b_max 1.6e9 vs a healthy
-           # MysteryPath ~5e2–2e4). NovelD has no IDM/ellipsoid, is pixel-proven here
-           # (it rescues MysteryPath-penalty), and matches this env's cue-finding geometry
-           # (like S13, where NovelD is THE catalyst). The e3b-vs-PBIM keystone stays on
-           # MysteryPath (n=5); MiniWorld carries freeze + non-potential rescue in 3D.
-           ["none", "noveld"],
-           # MiniWorld-Sign's stock reward IS float(correct)*2-1 = +1 correct / -1 wrong
-           # object / 0 timeout, i.e. an avoidable penalty with a 0-cost timeout sanctuary.
-           # penalty = stock (-1, freeze-capable); sparse = wrong→0 (return-matched twin,
-           # optimal +1 in BOTH). See memrl/envs/miniworld_wrappers.py.
-           [Density("sparse",  env_kwargs={"reward_wrong": 0.0}),
-            Density("penalty", env_kwargs={"reward_wrong": -1.0})],
-           20_000_000,                          # match the MysteryPath headline budget +
-                                                # get the 20M snapshot; freeze must be the
-                                                # CONVERGED fixed point, not slow learning
-           "3D EGOCENTRIC PIXELS (60×80×3 → NatureCNN) · generality of the SEALING-PENALTY "
-           "phenomenon beyond gridworlds: penalty-none should FREEZE (success→0, committed→0 "
-           "= retreats to the timeout sanctuary), the return-matched sparse twin stays ALIVE, "
-           "the non-potential bonus (NovelD) rescues; conjunctive necessity (Memoryless "
-           "cannot solve) in 3D pixels. e3b-vs-PBIM keystone lives on MysteryPath.",
-           seeds=[0, 1, 2],
-           # pixel CNN on CPU (pyglet) — fewer parallel envs than the gridworld grid.
-           hp={"n_envs": 8}),
+    EnvArm("MiniHack", "MiniHack-Memento-F2-v0", "memrl-memtrain-minihack", SIX,
+           ["none", "e3b_idm", "noveld", "rnd"],
+           # Memento default reward: sparse +1 on the cue-matched target, -0.01/step,
+           # wrong fork = trap/death. cue (sleeping monster) shown ONLY at start → leaves
+           # view → memory REQUIRED (memoryless feedforward cannot learn). α>0 (exploration
+           # helps reach the distant fork). Corridor-R2/R3/R5 = exploration-difficulty knob.
+           [Density("sparse")],
+           10_000_000,
+           "EXPLORATION-COMMUNITY memory benchmark (E3B/NovelD/RIDE's home) · cue→retain→"
+           "choose, memory required · the RND ('global, mismatched') vs E3B/NovelD arm for C3 "
+           "· glyph-crop obs → GlyphEncoder (embedding+CNN). CPU/no-display.",
+           seeds=[0, 1, 2]),
 ]
 
 # ── method studies (vary a non-env axis) ────────────────────────────────────

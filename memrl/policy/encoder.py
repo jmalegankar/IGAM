@@ -165,6 +165,56 @@ class PixelEncoder(nn.Module):
         return self.mlp(feat.reshape(obs.shape[0], -1))
 
 
+class GlyphEncoder(nn.Module):
+    """Embedding + small CNN for a categorical glyph-grid observation (MiniHack/NLE).
+
+    The obs is an N×N grid of integer glyph IDs (entities). A flatten-MLP would treat
+    the IDs as continuous (id 100 ≈ id 101), destroying the categorical structure, so we
+    embed each glyph ID then convolve the agent-centred grid (no stride — the crop is
+    small, e.g. 9×9). The cue an agent must remember IS a specific glyph, so the embedding
+    is what makes Memento learnable.
+    """
+
+    def __init__(
+        self,
+        observation_space: gym.Space,
+        encoder_dim: int = 64,
+        hidden_dim: int = 128,
+        embed_dim: int = 32,
+    ) -> None:
+        super().__init__()
+        self.encoder_dim = encoder_dim
+        self.obs_mode = "glyph"
+        h, w = observation_space.shape
+        num_glyphs = int(np.max(observation_space.high)) + 1
+        self.embed = nn.Embedding(num_glyphs, embed_dim)
+        self.cnn = nn.Sequential(
+            nn.Conv2d(embed_dim, 32, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1), nn.ReLU(),
+        )
+        with torch.no_grad():
+            n_flat = self.cnn(torch.zeros(1, embed_dim, h, w)).reshape(1, -1).shape[1]
+        self.mlp = nn.Sequential(
+            nn.Linear(n_flat, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, encoder_dim),
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        for m in self.modules():
+            if isinstance(m, (nn.Linear, nn.Conv2d)):
+                nn.init.orthogonal_(m.weight, gain=nn.init.calculate_gain("relu"))
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, obs: Tensor) -> Tensor:
+        # obs: (B, H, W) glyph IDs (stored as float in the buffer; IDs are exact) → long.
+        e = self.embed(obs.long())               # (B, H, W, embed_dim)
+        e = e.permute(0, 3, 1, 2)                 # (B, embed_dim, H, W)
+        feat = self.cnn(e).reshape(obs.shape[0], -1)
+        return self.mlp(feat)
+
+
 def make_encoder(
     observation_space: gym.Space,
     encoder_dim: int = 64,
@@ -177,6 +227,11 @@ def make_encoder(
     grids, symbolic Box vectors, Discrete) uses ``FlatEncoder``. The two are
     deliberately distinct classes — pixel and grid envs are not the same problem.
     """
+    # 2-D integer Box = a categorical glyph grid (MiniHack `glyphs_crop`) → embedding+CNN.
+    if (isinstance(observation_space, gym.spaces.Box)
+            and len(observation_space.shape) == 2
+            and np.issubdtype(observation_space.dtype, np.integer)):
+        return GlyphEncoder(observation_space, encoder_dim, hidden_dim)
     if (isinstance(observation_space, gym.spaces.Box)
             and len(observation_space.shape) == 3
             and min(observation_space.shape[0], observation_space.shape[1]) >= 40):
