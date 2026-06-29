@@ -5,7 +5,7 @@ seed: 0
 encoder_dim: 128
 encoder_hidden: 256
 lr: 0.0003
-n_steps: 512
+n_steps: 2048
 n_epochs: 4
 gamma: 0.999
 gae_lambda: 0.98
@@ -14,8 +14,8 @@ ent_coef: 0.008
 vf_coef: 1.0
 max_grad_norm: 0.5
 target_kl: 0.05
-chunk_len: 128
-n_chunks_per_batch: 32
+chunk_len: 2048
+n_chunks_per_batch: 8
 eval_every_rollouts: 10
 n_eval_episodes: 20
 wandb: false
@@ -30,4 +30,4 @@ intrinsic: e3b_idm
 lambda_intrinsic: 0.01
 intrinsic_kwargs:
   normalize_phi: true
-run_name: memF2_dense_gdn_e3b_ck128_lam0.01
+run_name: memF2_dense_gdn_e3b_ck2048_lam0.01
