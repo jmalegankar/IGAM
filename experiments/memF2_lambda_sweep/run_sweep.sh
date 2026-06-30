@@ -24,11 +24,12 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$RUNS_DIR"
 
 CONFIGS=(
-  memF2_dense_gdn_e3b_ck2048_lam0.001   # DECISIVE: λ·bonus≈0.0003, ~33x below the hurry. Does it
-                                        # finally march+learn, or still collapse to diffusion?
-  memF2_dense_gdn_e3b_ck2048_lam0.003   # already seen to collapse (parallel) — re-confirm clean
-  memF2_dense_gdn_e3b_ck2048_lam0.01
-  memF2_dense_gdn_e3b_ck2048_lam0.03
+  memF2_dense_gdn_noveld_ck2048_lam0.03   # NovelD standard — does its first-visit/RND-diff align
+                                          # forward (march+learn) or collapse to diffusion like e3b?
+  memF2_dense_gdn_e3b_ck2048_lam0.001     # e3b DECISIVE: ~33x below the hurry — any λ escape the basin?
+  memF2_dense_gdn_noveld_ck2048_lam0.003  # NovelD low λ
+  memF2_dense_gdn_e3b_ck2048_lam0.003     # e3b clean re-confirm (parallel run showed collapse)
+  # e3b lam0.01 / lam0.03 already shown to collapse (parallel) — files kept, not re-run by default
 )
 
 echo "running ${#CONFIGS[@]} ck=ns e3b arms SEQUENTIALLY → $RUNS_DIR"

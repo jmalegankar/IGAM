@@ -35,7 +35,27 @@ jobs on top of the discriminator; run just `lam0.003` first if contended).
   Low-λ e3b marches but **stays flat ~0.5 while none climbs** → genuine bonus×memory
   interference. High-λ (0.03) is expected to diffuse → 0 regardless.
 
-**Scope / attribution.** Even the best case shows e3b *doesn't hurt* on F2 — it can't
+## Findings so far + NovelD (2026-06-29)
+
+First (parallel) run, before a clean sequential pass: **e3b collapses on F2 at every λ down
+to 0.003.** It never marches — ep_len drops 3371→~1037 by 0.5M and stays there for 2.5M,
+succ 0, while the ck=ns `none` discriminator marches (ep_len 73) and climbs to 0.60. And it
+does so at λ=0.003 where `λ·bonus≈0.0009` is **11× below the −0.01 hurry** — so it's not a
+steady-state reward balance, it's an **early-training policy collapse into a diffusion
+basin**. → leans the genuine-task-level branch, not recoverable-by-λ. (Caveat: that run was
+parallel and OOM-killed the discriminator at 1.31M; re-run clean + sequential, and λ=0.001
+is the decisive untested point.)
+
+**NovelD arms added.** Mechanistically NovelD may behave differently: it's a first-visit-
+gated RND *difference*, rewarding novelty *increase* and killing credit for backtracking, so
+on a linear corridor its gradient points *forward* (deeper = more novel = toward the fork),
+unlike e3b's any-within-episode-novelty (which pays off-path wandering). **Caveat:** NovelD's
+first-visit gate hashes the *observation*, and our obs is the *egocentric* crop — a uniform
+corridor looks like the same state every step, which could misfire the gate and push NovelD's
+bonus → ~0 (benign, but for the wrong reason). Watch `intrinsic/bonus_mean`: ~0 ⇒ the crop
+makes the corridor look identical; healthy + marching ⇒ genuinely forward-aligned.
+
+**Scope / attribution.** Even the best case shows the bonus *doesn't hurt* on F2 — it can't
 *help*, because F2's bottleneck is the cue→fork BPTT gap, not exploration. Memento is
 **not** an E3B benchmark (verified — E3B's MiniHack suite is MultiRoom / Corridor-R5 /
 KeyRoom / Labyrinth / LavaCrossing + skills; no Memento), so a coverage bonus hurting a
