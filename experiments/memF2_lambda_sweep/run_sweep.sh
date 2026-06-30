@@ -23,13 +23,15 @@ RUNS_DIR=${RUNS_DIR:-runs/spark}
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$RUNS_DIR"
 
+# The MARCHING arms (total 20M) — these reach the fork and sit at the cue-blind 0.5
+# plateau; the question now is whether they GROK the cue with much longer training (on S13,
+# GDN-none sat at 0.545 until ~17M then finished 0.98). Resume to keep the ~3M already done:
+#   train.py --resume-from runs/spark/<run_name>/<cell>/<seed_dir> --total-timesteps 20000000 ...
 CONFIGS=(
-  memF2_dense_gdn_noveld_ck2048_lam0.03   # NovelD standard — does its first-visit/RND-diff align
-                                          # forward (march+learn) or collapse to diffusion like e3b?
-  memF2_dense_gdn_e3b_ck2048_lam0.001     # e3b DECISIVE: ~33x below the hurry — any λ escape the basin?
-  memF2_dense_gdn_noveld_ck2048_lam0.003  # NovelD low λ
-  memF2_dense_gdn_e3b_ck2048_lam0.003     # e3b clean re-confirm (parallel run showed collapse)
-  # e3b lam0.01 / lam0.03 already shown to collapse (parallel) — files kept, not re-run by default
+  memF2_dense_gdn_noveld_ck2048_lam0.03   # marches (ep_len ~195) at standard λ — best grok candidate
+  memF2_dense_gdn_e3b_ck2048_lam0.001     # marches (escapes basin, crossover ~0.002) — grok?
+  memF2_dense_gdn_noveld_ck2048_lam0.003  # marches — grok?
+  # DIFFUSED (collapsed to ep_len ~1037, succ 0): e3b lam0.003/0.01/0.03 — done, NOT re-run.
 )
 
 echo "running ${#CONFIGS[@]} ck=ns e3b arms SEQUENTIALLY → $RUNS_DIR"

@@ -35,6 +35,23 @@ jobs on top of the discriminator; run just `lam0.003` first if contended).
   Low-λ e3b marches but **stays flat ~0.5 while none climbs** → genuine bonus×memory
   interference. High-λ (0.03) is expected to diffuse → 0 regardless.
 
+## Clean sequential results + the grok (2026-06-30)
+
+The clean run resolved the e3b question and surfaced the NovelD one:
+- **e3b is scale, not categorical.** `λ=0.001` MARCHES (ep_len 70, succ 0.50 like none) while
+  `λ≥0.003` collapses to diffusion (ep_len 1037, succ 0). So the march/diffuse crossover is
+  ~0.002 — far below the naive 0.01, but recoverable by λ.
+- **NovelD ≫ e3b on the corridor.** At the standard `λ=0.03` (where e3b fully diffuses),
+  NovelD mostly marches (ep_len ~195, bonus_mean ~0.3 — gate firing, not inert) — forward-
+  aligned, as predicted.
+- **All marching arms sit at the cue-blind 0.5 plateau** (none, e3b-0.001, both NovelD),
+  with excursions to 0.6–0.75 = the grok beginning. This is the MiniGrid-Memory / S13 curve:
+  reach-the-fork is learned fast, the cue groks LATE. On S13 GDN-none sat at 0.545 until
+  ~17M then finished 0.98 → **expect the Memento grok ~15–20M**, so the marching arms are
+  bumped to `total_timesteps: 20M` (the diffused arms are left — longer won't unstick them).
+  ck=ns at 20M is GPU-days on one box; the auxiliary cue-preservation loss is the faster
+  route to the same grok if patience runs out.
+
 ## Findings so far + NovelD (2026-06-29)
 
 First (parallel) run, before a clean sequential pass: **e3b collapses on F2 at every λ down

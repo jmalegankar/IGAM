@@ -1,6 +1,6 @@
 env_name: MiniHack-Memento-F2-v0
 n_envs: 16
-total_timesteps: 3000000
+total_timesteps: 20000000
 seed: 0
 encoder_dim: 128
 encoder_hidden: 256
