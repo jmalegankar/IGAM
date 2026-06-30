@@ -24,9 +24,11 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$RUNS_DIR"
 
 CONFIGS=(
-  memF2_dense_gdn_e3b_ck2048_lam0.003   # below crossover — should march; does it learn? (decisive)
-  memF2_dense_gdn_e3b_ck2048_lam0.01    # at the crossover
-  memF2_dense_gdn_e3b_ck2048_lam0.03    # above crossover — expected to diffuse → 0
+  memF2_dense_gdn_e3b_ck2048_lam0.001   # DECISIVE: λ·bonus≈0.0003, ~33x below the hurry. Does it
+                                        # finally march+learn, or still collapse to diffusion?
+  memF2_dense_gdn_e3b_ck2048_lam0.003   # already seen to collapse (parallel) — re-confirm clean
+  memF2_dense_gdn_e3b_ck2048_lam0.01
+  memF2_dense_gdn_e3b_ck2048_lam0.03
 )
 
 echo "running ${#CONFIGS[@]} ck=ns e3b arms SEQUENTIALLY → $RUNS_DIR"
