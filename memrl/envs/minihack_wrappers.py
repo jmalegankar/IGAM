@@ -1,12 +1,28 @@
 """MiniHack (NetHack Learning Environment) → memory-RL wrapper.
 
-MiniHack-Memento / -Corridor are the canonical exploration-community memory tasks
-(E3B's headline benchmark; also NovelD/RIDE). Memento: a cue (a sleeping monster of a
-specific type) is shown ONLY at episode start; the agent navigates a corridor (cue
-leaves view → memory required), then chooses a fork from memory (wrong fork = invisible
-trap). Same cue→retain→choose structure as MiniGrid-MemoryS13, and memory is genuinely
-required (a memoryless feedforward agent cannot learn it). Corridor-R2/R3/R5 scale the
-*exploration* difficulty (number of rooms) while holding the memory cue fixed.
+TWO DISTINCT task families — do NOT conflate (an earlier version of this docstring did):
+
+  • Memento (-Short-F2 / -F2 / -F4) = a MiniHack MEMORY task (MiniHack benchmark,
+    Samvelyan et al. 2021). NOT an E3B/NovelD/RIDE benchmark — those used the procedural
+    MultiRoom / LavaCrossing / Labyrinth COVERAGE tasks; Memento appears in none of them
+    (verified against Henaff et al. 2022, E3B). A cue (a sleeping monster of a specific
+    type) is shown ONLY at episode start; the agent walks a straight corridor (cue leaves
+    the egocentric crop after ~1 step → memory required), then picks a fork from memory
+    (wrong fork = invisible trap, native −1). Same cue→retain→choose structure as
+    MiniGrid-MemoryS13.
+      - A coverage/exploration bonus does NOT help Memento, as a category: the only thing
+        to "discover" is a 1-bit memory-gated fork, not new states, so novelty just pulls
+        the agent off the single optimal corridor (empirically E3B/NovelD HURT it).
+      - Trainability caveat (two stacked horizons): GAE handles the short reward→fork
+        credit (~13 steps) fine, but fork→cue is pure BPTT through the recurrence over the
+        corridor length, truncated at chunk_len. Short-F2 (~8-step gap) trains to 1.0; the
+        long F2/F4 (~57-step gap) floors at chance even at chunk_len 128 — needs chunk_len
+        ≫ gap (BPTT-memory-expensive) or an auxiliary cue-preservation loss. Use Short-F2
+        as the controlled memory probe.
+
+  • Corridor (-R2/R3/R5) and MazeWalk (-9x9/-15x15/-45x19) = EXPLORATION tasks (no cue, no
+    held memory) — the genre exploration bonuses actually target. Hard at small compute
+    (E3B used 50M steps + IMPALA + full obs).
 
 We expose the agent-centred **glyph crop** (a small grid of categorical glyph IDs) as
 the observation; it routes to `GlyphEncoder` (embedding + CNN). CPU-only, no display/GL

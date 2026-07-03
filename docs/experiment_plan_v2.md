@@ -41,41 +41,25 @@ baked in. Companion to `theory_v2_memory_training.md`, `paper_plan_memory_traini
 
 ## 2. Experiment table
 
-**Restructured (2026-06-13):** the env×density×bonus grid is ONE experiment, **E1**,
-replicated across the env suite. MortarMayhem / Autoencode / S13 / Battleship /
-TinyReproduce / SearingSpotlights are **E1 on another env** (a slice), not separate
-experiments. The 20M headline (3× sparse none-vs-e3b) is the **MysteryPath-sparse
-slice** of E1 — no standalone headline experiment. Only studies that vary a
-*non-env* axis (λ, k, φ, architecture) are distinct. Source of truth:
-`experiments/memory_training/registry.py` (`--list`). Cost is not a constraint (cluster).
+| id | env | cells | arms | density | seeds | budget | runs | jobs | serves | tier | deps |
+|----|-----|-------|------|---------|-------|--------|------|------|--------|------|------|
+| **E1 Core** | MysteryPath | 6 | none/e3b/pbim/noveld | sparse+penalty | 5 | 20M | 180 | 60 | F1,F2,F3,entangle,P5 | 1 | fixes |
+| **E2 Probe** | — (E1 snapshots) | 6 | — | — | 5 | offline | 0 | CPU | F1, P5 | 1 | E1 |
+| **E3 λ-sweep** | MysteryPath sparse | GRU | none/e3b | sparse | 3 | 20M | 30 | 15 | F4 (P2) | 1 | fixes |
+| **E4 MortarMayhem** | MortarMayhem | 4* | none/e3b/pbim | sparse+aligned | 5 | 20M | 120 | 40 | F4 redundancy, mem-type 2 | 2 | fixes |
+| **E5 S13** | MiniGrid-MemoryS13 | 6 | none/e3b/noveld | sparse | 5 | 20M | 90 | 30 | retention contrast, mem-type 3 | 2 | fixes |
+| **E6 Tiny** | tiny fixed maze | 1–2 | none/e3b | sanctuary toggle | 5 | 2–3M | ~20 | small | P1 bound, P4 causal, RM validation | 2 | build env + DP |
+| **E7 20M head** | MysteryPath sparse | 6 | none/e3b | sparse | 5 | 20M | 60 | 30 | honest headline 3× | 3 | E1 |
+| **E8 SS** | SearingSpotlights | 4* | none/e3b | sparse+anti | 5 | 20M | 80 | 40 | no-sanctuary freeze boundary, mem-type 4 | 4 | MultiDiscrete fix ✓ |
+| **E9 k-sweep** | MysteryPath sparse | GRU | none/e3b | sparse | 3 | 20M | 48 | 24 | P2 secondary (non-monotone) | 4 | episode-aligned chunks |
+| **E10 φ-ablation** | MysteryPath sparse | GRU,RetNet, GatedDeltaNet | e3b_idm/rand/obs | sparse | 5 | 10M | 30 | 10 | which bonus trains memory | 3 | — |
+| **E11 Entangle** | MysteryPath sparse | GRU,RetNet,GatedDeltaNet | none/e3b/entangled-aux | sparse | 5 | 10M | 30 | 10 | P3 causal + recipe | 4 | build aux-loss arm |
+| **E12 Autoencode** | popgym-AutoencodeEasy | 6 | none/e3b | sparse+dense | 5 | 20M | 120 | 60 | mem-type 5 (retention), KNOWN-RM probe GT, clean δ-toggle | 2 | toggle ✓ |
+| **E13 Battleship** | popgym-BattleshipEasy | 4* | none/e3b | sparse+dense | 5 | 10M | 80 | 40 | **2nd α>0 env** (generalizes "bonus helps"), mem-type 6 | 2 | coord-aug ✓ |
+| **E14 TinyReproduce** | TinyReproduce (k6,v2) | 3 | none/e3b | sparse+dense | 5 | 2M | 60 | 30 | **enumerable-RM** probe/P5 validation (colleague's example) | 2 | env ✓ |
 
-### E1 — CORE GRID (env × density × bonus × cell × seed)
-
-| env-slice | mem-type / α | cells | bonuses | densities | budget | runs | unique role |
-|-----------|--------------|-------|---------|-----------|--------|------|-------------|
-| MysteryPath | spatial trace, α>0 | 6 | none/e3b/pbim/noveld | sparse/penalty/aligned | 20M | 360 | **headline** + F1/F2/F3/entangle/P5 |
-| MortarMayhem | sequence WM, α≈0 | 4* | none/e3b/pbim | sparse/aligned | 20M | 120 | **exact** return-match (4×0.25=1) → clean redundancy flip |
-| Autoencode | reproduce, α≈0 | 6 | none/e3b | sparse/dense | 20M | 120 | exact δ-toggle + **known RM** (exact probe GT) |
-| S13 | recall, α≈0 | 6 | none/e3b/noveld | sparse | 20M | 90 | retention contrast + noveld≥e3b reversal |
-| Battleship | grid-probe, α>0 | 4* | none/e3b | sparse/dense | 10M | 80 | **2nd α>0** env → generalizes "bonus helps" |
-| TinyReproduce | reproduce, α≈0 | 3 | none/e3b | sparse/dense | 2M | 60 | **enumerable RM** (colleague's example) → exact eff-RM-size |
-| SearingSpotlights | dead-reckon, α<0 | 4* | none/e3b | sparse/anti | 10M | 80 | α<0 hazard + no-sanctuary freeze boundary |
-
-**E1 total: 910 runs.** Headline = MysteryPath-sparse none-vs-e3b slice (no separate run).
-
-### Method studies (vary a non-env axis → distinct experiments)
-
-| id | study | env | grid | runs | serves | deps |
-|----|-------|-----|------|------|--------|------|
-| **E2** | decodability + eff-RM-size probe | — (E1 snapshots) | offline | 0 | F1, P5 | E1 snapshots |
-| **E3** | GAE-λ sweep | MysteryPath sparse | GRU × λ{.8,.9,.95,.99,1} × {none,e3b} × 3 | 30 | P2 mechanism (can falsify our own theory) | ✓ |
-| **E6** | tiny maze: sanctuary + DP | TinyMaze | 2c × {sanc,no-sanc} × {none,e3b} × 5 | 40 | P1 bound, P4 deconfound | ⛔ build env + DP |
-| **E9** | TBPTT k-sweep | MysteryPath sparse | GRU × k{1..128} × {none,e3b} × 3 | 48 | P2 secondary (non-monotone, k=1 collapse) | ⛔ episode-aligned chunks |
-| **E10** | φ-ablation | MysteryPath sparse | 3c × {idm,rand,obs} × 5 | 45 | which bonus trains memory | ✓ |
-| **E11** | entangled IDM-aux | MysteryPath sparse | 3c × {none,e3b,shared} × 5 | 45 | P3 causal + recipe | ⛔ build shared arm |
-
-\* MortarMayhem / Battleship / SS use 4 cells (GRU, RetNet, GatedDeltaNet, Memoryless;
-weak/strong/floor preserved). **Grand total runnable: 985** (E6/E9/E11 blocked on code).
+\* E4/E8 use 4 cells: GRU, RetNet, GatedDeltaNet, Memoryless (compute economy; the
+strong/weak/floor spread is preserved). E12 is vector-obs → fast/cheap despite 120 runs.
 
 ---
 
@@ -248,11 +232,6 @@ All probe outputs are JSON lines from `memrl/probes/decode_memory.py` (decodabil
 ---
 
 ## 7. Pre-registration block (file before unblinding the 5-seed comparisons)
-
-**Superseded and locked by `docs/preregistration.md` (filed 2026-06-16).** That file
-is the authoritative source for the headline claim, primary metric, statistical tests,
-equivalence margins, the locked idle-fraction / lag-Δ-retention / PBIM-ρ rules, and the
-inclusion/survivorship rules. The summary below is retained for orientation.
 
 - Decodability decision rule (E1/E2): §3.
 - α is **not** a claimed taxonomy; if reported, measured under a fixed reference

@@ -1,0 +1,29 @@
+env_name: MiniGrid-MemoryS13-v0
+n_envs: 16
+total_timesteps: 20000000
+seed: 0
+cell:
+  name: LSTM
+encoder_dim: 128
+encoder_hidden: 256
+lr: 0.0003
+n_steps: 512
+n_epochs: 4
+gamma: 0.999
+gae_lambda: 0.98
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 1.0
+max_grad_norm: 0.5
+target_kl: 0.05
+chunk_len: 32
+n_chunks_per_batch: 32
+eval_every_rollouts: 10
+n_eval_episodes: 100
+wandb: false
+intrinsic: noveld
+env_kwargs:
+  agent_view_size: 7
+  reward_mode: flat
+  move_penalty: 0.001183431952662722
+run_name: S13_freeze_v7_LSTM_noveld
