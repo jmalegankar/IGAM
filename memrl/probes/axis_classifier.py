@@ -235,6 +235,89 @@ def classify_mysterypath(n_episodes: int = 300, seed: int = 0,
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# MiniGrid-MemoryS13 — retention regime with a VIEW-DEPENDENT residual acquisition
+# demand (the cue-exposure dose-response; also the geometry I-4 reuses under a
+# trained policy). The cue (start-room object) sits at (1, h//2-1); the agent must
+# ORIENT/move to bring it into the egocentric view. Smaller view ⇒ more agent-
+# contingent cue exposure ⇒ more residual acquisition on an otherwise-retention task.
+# ──────────────────────────────────────────────────────────────────────────
+def _cue_visible(u, cue_xy: tuple[int, int], view: int) -> bool:
+    """Is the cue cell inside the agent's `view`×`view` egocentric window (with wall
+    occlusion), computed at an EXPLICIT view size — ViewSizeWrapper keeps the reduced
+    size on the wrapper, not on `u` (unwrapped), so we must not rely on u.agent_view_size."""
+    ax, ay = u.agent_pos
+    dx, dy = u.dir_vec
+    rx, ry = u.right_vec
+    hs = view // 2
+    tx = ax + dx * (view - 1) - rx * hs          # top-left view corner (mirrors get_view_coords)
+    ty = ay + dy * (view - 1) - ry * hs
+    lx, ly = cue_xy[0] - tx, cue_xy[1] - ty
+    vx = rx * lx + ry * ly
+    vy = -(dx * lx + dy * ly)
+    if not (0 <= vx < view and 0 <= vy < view):
+        return False
+    try:                                          # wall occlusion via the obs vis-mask at size V
+        _, vis = u.gen_obs_grid(view)
+        return bool(vis[vx, vy])
+    except Exception:
+        return True                               # geometric in-view (no occlusion info)
+
+
+def classify_s13(view: int = 3, n_episodes: int = 200, seed: int = 0) -> dict:
+    env = make_vec_env("MiniGrid-MemoryS13-v0", n_envs=1, seed=seed,
+                       agent_view_size=view, reward_mode="flat")
+    rng = np.random.default_rng(seed)
+    n_act = _n_actions(env)
+    env.reset()
+    u = _unwrap(env)
+    max_steps = int(getattr(u, "max_steps", 5 * 13 ** 2))
+    cue = (1, int(u.height) // 2 - 1)
+
+    cue_occ, cue_t = [], []                        # cue-enters-view: the state-SETTING event
+    succ_occ, succ_t = [], []                      # reach the matching object (accept)
+    seen_this_ep = False
+    first_seen = None
+    t = 0
+    eps = 0
+    guard = 0
+    # check visibility at t=0 too (agent may spawn already seeing the cue)
+    if _cue_visible(u, cue, view):
+        seen_this_ep, first_seen = True, 0
+    while eps < n_episodes and guard < n_episodes * (max_steps + 4):
+        guard += 1
+        a = int(rng.integers(0, n_act))
+        _, _, dones, infos = env.step(np.asarray([a]))
+        info = infos[0]
+        t += 1
+        done = bool(dones[0])
+        u = _unwrap(env)
+        if not done:
+            if not seen_this_ep and _cue_visible(u, cue, view):
+                seen_this_ep, first_seen = True, t
+        if done:
+            cue_occ.append(seen_this_ep); cue_t.append(first_seen)
+            accepted = bool(info.get("is_success", 0.0))
+            succ_occ.append(accepted); succ_t.append(t if accepted else None)
+            eps += 1
+            u = _unwrap(env)                       # new episode (auto-reset)
+            cue = (1, int(u.height) // 2 - 1)
+            seen_this_ep = _cue_visible(u, cue, view)
+            first_seen = 0 if seen_this_ep else None
+            t = 0
+    transitions = {
+        f"cue_seen(view{view})  [enters egocentric view]": _summ_event(cue_occ, cue_t, max_steps),
+        "accept  [reach matching object]": _summ_event(succ_occ, succ_t, max_steps),
+    }
+    n_contingent = sum(1 for v_ in transitions.values()
+                       if v_["classification"] == "agent-contingent")
+    return {"env": "MiniGrid-MemoryS13", "view": f"view{view}", "regime": "retention",
+            "transitions": transitions,
+            "frac_agent_contingent": round(n_contingent / len(transitions), 3),
+            "note": "cue_seen exogeneity DECREASES with view size = the residual "
+                    "acquisition demand (H-KNOB-B dose-response)"}
+
+
+# ──────────────────────────────────────────────────────────────────────────
 def _print_table(rows: list[dict]) -> None:
     print("\n=== I-5 agent-contingency table (uniform-random policy) ===")
     for r in rows:
@@ -253,7 +336,8 @@ def _print_table(rows: list[dict]) -> None:
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--env", default="both", choices=["both", "tiny", "mysterypath"])
+    ap.add_argument("--env", default="both", choices=["both", "tiny", "mysterypath", "s13"])
+    ap.add_argument("--views", default="7,5,3", help="s13: comma view sizes to sweep")
     ap.add_argument("--n-episodes", type=int, default=300)
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--v", type=int, default=4)
@@ -268,6 +352,9 @@ def main():
                                   n_episodes=args.n_episodes, seed=args.seed))
     if args.env in ("both", "mysterypath"):
         rows.append(classify_mysterypath(n_episodes=args.n_episodes, seed=args.seed))
+    if args.env == "s13":
+        for v in (int(x) for x in args.views.split(",")):
+            rows.append(classify_s13(view=v, n_episodes=args.n_episodes, seed=args.seed))
 
     _print_table(rows)
     for r in rows:
