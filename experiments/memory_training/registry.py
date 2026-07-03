@@ -133,17 +133,26 @@ CORE = [
             Density("dense", env_kwargs={"autoencode_density": "dense", "autoencode_order": "reverse"})],
            20_000_000,
            "α≈0 reproduce · EXACT δ-toggle · KNOWN minimal RM → exact probe ground truth"),
-    EnvArm("S13", "MiniGrid-MemoryS13-v0", "memrl-memtrain-s13", ZOO12,
-           ["none", "e3b_idm", "noveld"],
-           [Density("sparse", env_kwargs={"agent_view_size": 3})],
+    EnvArm("S13", "MiniGrid-MemoryS13-v0", "memrl-s13-matched", SIX,
+           ["none", "e3b_idm", "noveld", "pbim_e3b_idm"],
+           # EXP-7 / EXP-1. Reward- AND metric-matched to MysteryPath via MemoryRewardWrapper
+           # (minigrid_wrappers.py). MiniGrid's NATIVE S13 reward is horizon-DISCOUNTED
+           # (1 - 0.9 t/T, T_max = 5*13^2 = 845) — not sparse — which confounds the
+           # amplify-vs-equalize sign with a reward-shape/metric difference. reward_mode=flat
+           # gives a clean +1/0 with a binary success_rate (matched to MPG's sparse arm). The
+           # freeze arm adds an UNCONDITIONAL -1/T_max per movement action with a free no-op
+           # sanctuary — the always-paid cost the success-discount lacks (so it can freeze).
+           [Density("sparseV3", env_kwargs={"agent_view_size": 3, "reward_mode": "flat"}),
+            Density("sparseV7", env_kwargs={"agent_view_size": 7, "reward_mode": "flat"}),
+            Density("freezeV3", env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
+                                            "move_penalty": 1.0 / 845})],
            20_000_000,
-           "EMBODIED PO retention (egocentric 3×3 view: forces cue→memory, widens the "
-           "memory-vs-Memoryless gap + extends the forced-retention window = cleaner "
-           "realization probe) · α≈0 bonus-neutral contrast · noveld≥e3b reversal · "
-           "FULL 12-cell zoo → cell×memory-type recall comparison",
-           # S13's OWN tuned HP (the values that solved it in memrl-s13-baseline) —
-           # NOT the MysteryPath global HP. S13's delayed cross-corridor reward needs
-           # the longer credit horizon (gamma/λ) and lr 3e-4.
+           "EXP-7 amplify-vs-equalize at n=5 (flat-sparse, both views, success_rate) + EXP-1 "
+           "the freeze on a cue-retention task · common 6-cell zoo + pbim (ρ keystone, 2nd env). "
+           "12-cell native (discounted) runs are appendix-only, archived in memrl-memtrain-s13.",
+           # S13's OWN tuned HP (the values that solved it in memrl-s13-baseline) — NOT the
+           # MysteryPath global HP. Delayed cross-corridor reward needs the longer credit
+           # horizon (gamma/λ) and lr 3e-4.
            hp={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
     EnvArm("Battleship", "popgym-BattleshipEasy-v0", "memrl-memtrain-battleship", FOUR,
            ["none", "e3b_idm"],
@@ -229,6 +238,36 @@ METHODS = [
            [0, 1], 10_000_000,
            "C4/F8: does GDN close the gated-RNN exact-recall gap at its best HP? "
            "report cell rankings at per-cell-best HP (k10 floor at lr1e-4 is tuning, not capacity)"),
+    Method("HPOT", "Oracle-potential rescue arm (PBIM counterexample, MysteryPath penalty)",
+           "MysteryPath-Grid-v0", "memrl-mpg-oraclepot", THREE_STRONG, ["none"],
+           # H-POT §3.2: penalty arm + a TASK-INFORMED state potential Φ=−β·d(agent,goal)
+           # delivered as PBRS on r_ext via OraclePotentialWrapper (NOT an intrinsic module —
+           # so intrinsic=none). Tests whether an oracle potential reopens the freeze where
+           # PBIM's bonus-derived potential provably cannot (ρ=0). gamma MUST match the HP γ
+           # (0.995) for telescoping consistency; β tuned to the e3b delivered-bonus scale.
+           # Both outcomes are locked wins (rescue ⇒ "bonus value is its non-potential
+           # residual"; no-rescue ⇒ "neither potential reopens the freeze").
+           [Density("penalty_oraclepot",
+                    env_kwargs={"reset_options": {"reward_fall_off": -0.008},
+                                "oracle_potential": {"beta": 0.02, "gamma": 0.995}})],
+           [0, 1, 2], 20_000_000,
+           "PBIM-section survival kit (A5): task-informed extrinsic potential vs the freeze; "
+           "n=3 → backfill to 5 if contested. Compare vs penalty-none freeze in memrl-memtrain-mpg."),
+    Method("E5", "GatedDeltaNet best-HP α≈0 closure (Tiny)",
+           "TinyReproduce-v0", "memrl-tiny-exp5", ["GatedDeltaNet"], ["none", "e3b_idm"],
+           # GDN at its per-cell-best HP (lr 1e-3, assoc 64 — the E15 sweet spot where it
+           # reaches ~0.35-0.40, so the cell has HEADROOM). Does E3B still do nothing there?
+           # Closes the floor-confound on the α≈0 control (E15 was intrinsic=none only, so
+           # "E3B≈none" was only shown while GDN was floored).
+           [Density("besthp_sparse",
+                    env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"},
+                    cfg={"lr": 1e-3, "cell": {"name": "GatedDeltaNet", "kwargs": {"assoc_size": 64}}}),
+            Density("besthp_dense",
+                    env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"},
+                    cfg={"lr": 1e-3, "cell": {"name": "GatedDeltaNet", "kwargs": {"assoc_size": 64}}})],
+           [0, 1, 2, 3, 4], 10_000_000,
+           "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
+           "inert, not a floor artifact. Pairs with E15."),
 ]
 METHOD = {m.eid: m for m in METHODS}
 
