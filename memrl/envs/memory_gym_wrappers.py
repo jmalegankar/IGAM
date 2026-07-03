@@ -91,6 +91,58 @@ class SuccessInfoAlias(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
 
+class OraclePotentialWrapper(gym.Wrapper):
+    """PBRS with a task-informed ORACLE state potential (H-POT §3.2) — the PBIM counterexample.
+
+    Φ(s) = −β·d(agent, goal), d = Manhattan grid distance to the (designer-known) goal
+    ``end``. Adds the potential-based shaping ``F_t = γ·Φ(s_{t+1}) − Φ(s_t)`` to the reward,
+    Φ recomputed each step from the PRIVILEGED env geometry (``normalized_agent_position``,
+    ``end``) — information no pixel-obs agent has (W-4: a diagnostic, not a deployable arm).
+
+    Because Φ is a function of state only, PBRS is optimality-preserving (Ng–Harada–Russell
+    1999): the discounted per-episode shaping sum ΣₙγⁿFₙ telescopes to γᵀΦ_T − Φ_0 = −Φ_0
+    (endpoint-only, since Φ(absorbing)≡0 here), so it cannot change the optimal policy — only
+    the critic's learning signal. Verified by the telescoping self-test.
+
+    Why it exists: it is the constructible counterexample to the PBIM null. PBIM's potential
+    is the value of the FROZEN agent's own near-constant bonus (degenerate); a TASK-INFORMED
+    oracle potential MAY reopen the freeze (that is what PBRS is *for*). Either outcome is a
+    locked win (handoff §3.2). ``β`` sets magnitude — tune it so ``info['oracle_absF']`` mean
+    matches the e3b arm's delivered bonus within ~2×; ``gamma`` MUST match PPO's γ so the
+    telescoping is consistent with the value targets (as PBIM requires).
+    """
+
+    def __init__(self, env: gym.Env, beta: float = 0.02, gamma: float = 0.995) -> None:
+        super().__init__(env)
+        self.beta = float(beta)
+        self.gamma = float(gamma)
+        self._prev_phi = 0.0
+
+    def _phi(self) -> float:
+        u = self.env.unwrapped
+        ax, ay = u.normalized_agent_position
+        ex, ey = u.end
+        d = abs(int(ax) - int(ex)) + abs(int(ay) - int(ey))     # Manhattan on the 7×7 grid
+        return -self.beta * d
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        self._prev_phi = self._phi()
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        # Φ(absorbing) ≡ 0 on ANY episode end (goal or time-limit) → the added return is
+        # −Φ(s_0), a per-start constant, so the optimal policy is provably unchanged.
+        phi_next = 0.0 if (terminated or truncated) else self._phi()
+        F = self.gamma * phi_next - self._prev_phi
+        self._prev_phi = phi_next
+        info = dict(info)
+        info["oracle_F"] = float(F)
+        info["oracle_absF"] = abs(float(F))
+        return obs, float(reward + F), terminated, truncated, info
+
+
 class StickyResetOptions(gym.Wrapper):
     """Replay a fixed ``options`` dict on every ``reset(...)``.
 
@@ -112,6 +164,7 @@ def make_memory_gym_vec_env(
     n_envs: int = 8,
     seed: int = 0,
     reset_options: Optional[dict[str, Any]] = None,
+    oracle_potential: Optional[dict[str, Any]] = None,
 ) -> VecEnv:
     """Build a vectorized memory-gym env.
 
@@ -127,12 +180,17 @@ def make_memory_gym_vec_env(
         seed:     base seed; env i is seeded with ``seed + i``.
         reset_options: passed as ``options`` on every ``env.reset(...)``.
                        Common keys: ``agent_scale``, ``command_count``.
+        oracle_potential: if given (a dict, e.g. ``{"beta": 0.02, "gamma": 0.995}``),
+                       wrap MysteryPath with OraclePotentialWrapper — the task-informed
+                       PBRS arm (H-POT §3.2). Set ``gamma`` to PPO's γ. MysteryPath only.
     """
     def _make_one(rank: int):
         def _init():
             env = gym.make(env_name)
             if reset_options:
                 env = StickyResetOptions(env, reset_options)
+            if oracle_potential is not None and "MysteryPath" in env_name:
+                env = OraclePotentialWrapper(env, **oracle_potential)
             env = SuccessInfoAlias(env)
             env = NormalizeImageObs(env)
             env.reset(seed=seed + rank)

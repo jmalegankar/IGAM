@@ -75,12 +75,68 @@ class CastImageFloat32(gym.ObservationWrapper):
         return obs.astype(np.float32)
 
 
+class MemoryRewardWrapper(gym.Wrapper):
+    """Reward variants for MiniGrid Memory envs, matched to memory-gym MysteryPath.
+
+    MiniGrid's native Memory reward is horizon-DISCOUNTED (``1 - 0.9*t/T`` on reaching the
+    matching object, ``0`` on the wrong object or timeout) — it conflates success with speed and
+    is *not* sparse. MysteryPath is flat ``+1`` (``reward_step=0``). To compare the two envs
+    under a MATCHED reward shape and metric, this wrapper exposes:
+
+      * ``mode="native"`` — pass the env's discounted reward through unchanged (the as-shipped
+        MiniGrid reward; what the current S13 runs used).
+      * ``mode="flat"``   — ``+1`` on reaching the matching object, ``0`` on the wrong object or
+        timeout: the flat-sparse twin, reward- and metric-matched to MysteryPath's sparse arm.
+      * ``move_penalty=p>0`` (the FREEZE arm) — additionally subtract ``p`` on every non-``nop``
+        action, an UNCONDITIONAL per-move cost the native discount lacks (the discount is booked
+        only on success, so it cannot induce a freeze). The ``nop`` action (MiniGrid ``done``,
+        idx 6) is free → a do-nothing sanctuary. Set ``p = 1/T_max`` for the horizon-normalized
+        freeze matching MysteryPath's ``-1/128`` off-path penalty.
+
+    Always emits ``info["is_success"]`` (reached the matching object), read from env geometry
+    (``agent_pos == success_pos``) so it is robust to the reward override — a binary success_rate
+    on every arm, matched to MysteryPath.
+    """
+
+    def __init__(self, env: gym.Env, mode: str = "native",
+                 move_penalty: float = 0.0, nop_action: int = 6) -> None:
+        super().__init__(env)
+        assert mode in ("native", "flat"), mode
+        self.mode = mode
+        self.move_penalty = float(move_penalty)
+        self.nop_action = int(nop_action)
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        info = dict(info)
+        info["is_success"] = False
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        u = self.env.unwrapped
+        success = bool(
+            terminated
+            and getattr(u, "success_pos", None) is not None
+            and tuple(u.agent_pos) == tuple(u.success_pos)
+        )
+        if self.mode == "flat":
+            reward = 1.0 if success else 0.0
+        if self.move_penalty and int(action) != self.nop_action:
+            reward -= self.move_penalty
+        info = dict(info)
+        info["is_success"] = success
+        return obs, float(reward), terminated, truncated, info
+
+
 def make_minigrid_vec_env(
     env_name: str,
     n_envs: int = 8,
     seed: int = 0,
     use_wrapper: bool = False,
     agent_view_size: Optional[int] = None,
+    reward_mode: str = "native",
+    move_penalty: float = 0.0,
 ) -> VecEnv:
     """Build a vectorized MiniGrid environment for memory tasks.
 
@@ -108,9 +164,16 @@ def make_minigrid_vec_env(
         see a flat 7*7*20 = 980-d float32 vector per timestep (3 bits set
         per cell out of 20).
     """
+    # Reward variants (flat-sparse / freeze) apply only to the Memory-* envs, which expose the
+    # success_pos geometry the wrapper reads. For non-memory ids (e.g. RedBlueDoors) the wrapper
+    # is skipped. Applied innermost so it sees the raw Discrete(7) action and the unwrapped env.
+    is_memory = "Memory" in env_name
+
     def _make_one(rank: int):
         def _init():
             env = gym.make(env_name)
+            if is_memory:
+                env = MemoryRewardWrapper(env, mode=reward_mode, move_penalty=move_penalty)
             if use_wrapper:
                 env = MemoryStartWrapper(env)
             if agent_view_size is not None:
@@ -120,7 +183,7 @@ def make_minigrid_vec_env(
             env = CastImageFloat32(env)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
-            return Monitor(env)
+            return Monitor(env, info_keywords=("is_success",)) if is_memory else Monitor(env)
         return _init
 
     return DummyVecEnv([_make_one(i) for i in range(n_envs)])
