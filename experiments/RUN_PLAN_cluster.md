@@ -33,8 +33,8 @@ matched to MysteryPath, at n=5, both views, plus the S13 **freeze** arm.
   DRY_RUN=1 EID=E1 ENV=S13 ONLY='s0_.*sparseV' k8s/launch-memtrain-jobs.sh
   EID=E1 ENV=S13 ONLY='s0_.*sparseV' k8s/launch-memtrain-jobs.sh
   # then the rest of sparse (seeds 1-4), then the freeze arm:
-  EID=E1 ENV=S13 ONLY='sparseV'      k8s/launch-memtrain-jobs.sh
-  EID=E1 ENV=S13 ONLY='freezeV3'     k8s/launch-memtrain-jobs.sh
+    EID=E1 ENV=S13 ONLY='sparseV'      k8s/launch-memtrain-jobs.sh
+    EID=E1 ENV=S13 ONLY='freezeV3'     k8s/launch-memtrain-jobs.sh
   ```
 - **Metric:** `eval/success_rate` (the wrapper emits `is_success` on every arm). Native discounted
   runs stay archived in `memrl-memtrain-s13` for reference.
@@ -107,6 +107,24 @@ built to break it. No new training.
   path). Infra-first; do not launch until built.
 
 ---
+
+## Re-launching after failures — DO NOT blind-relaunch (fixes the oversubscription)
+Blind re-launching the whole grid re-submits finished cells, so hundreds of jobs contend for
+GPUs and the excess **instant-fails (0 steps / 0 min)** — the failure signature seen 2026-07 on
+`memrl-s13-matched` (297 instant-fails while other jobs finished fine). Fix:
+```bash
+# 1. diagnose the actual reason (cluster-side)
+kubectl get pods -l app=memrl-memtrain | grep -v Running    # Unschedulable? ImagePullBackOff? OOMKilled?
+kubectl delete jobs -l app=memrl-memtrain --field-selector status.successful=0   # clear dead Job objects
+
+# 2. emit ONLY the real gaps, grouped into schedulable per-seed waves (diffs registry vs finished wandb)
+python -m experiments.memory_training.only_missing E1:S13      # staged per-seed EID/ENV/ONLY commands
+python -m experiments.memory_training.only_missing E5          # (project absent → all missing)
+python -m experiments.memory_training.only_missing HPOT
+# 3. paste ONE per-seed command at a time (each is ≤ a few dozen jobs), let it drain, then the next.
+```
+`only_missing` counts a cell as covered iff a run finished at ≥90% of budget OR is currently running,
+so it never re-submits done/in-flight work. Modes: `--mode staged` (default), `regex`, `list`.
 
 ## Owner split
 - Bridge (cluster + RM): launch EXP-7/EXP-1 + EXP-5 + H-POT; own EXP-9 (ρ_alive) and EXP-6 (stats) —
