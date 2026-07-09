@@ -136,7 +136,8 @@ def pull_curves(entity, specs, cache_dir, refresh=False):
             pts = []
         if not pts:
             continue
-        lbl = f"{project.split('-')[-1]}:{CELL_SHORT.get(cell, cell)}:{LBL[bonus]}"
+        env = "mpg" if "mpg" in project else ("s13" if "s13" in project else project)
+        lbl = f"{env}:{CELL_SHORT.get(cell, cell)}:{LBL[bonus]}"
         st = np.array([p[0] for p in pts]); sc = np.array([p[1] for p in pts])
         out[lbl] = (st, sc)
         rows += [{"label": lbl, "step": a, "succ": b} for a, b in zip(st, sc)]
@@ -182,8 +183,11 @@ def fig_freeze(penalty, sparse):
     x = np.arange(len(CELLS)); w = 0.2
     for j, bon in enumerate(bonuses):
         vals = [_mean(penalty, c, bon) for c in CELLS]
-        ax.bar(x + (j - 1.5) * w, vals, w, color=C[bon], label=LBL[bon],
-               edgecolor="white", linewidth=0.5)
+        xs = x + (j - 1.5) * w
+        ax.bar(xs, vals, w, color=C[bon], label=LBL[bon], edgecolor="white", linewidth=0.5)
+        for xi, v in zip(xs, vals):
+            if not np.isnan(v) and v < 0.05:     # label the frozen arms so 0-bars are legible
+                ax.text(xi, 0.015, f"{v:.2f}", ha="center", va="bottom", fontsize=7, color="#52514e")
     ref = [_mean(sparse, c, "none") for c in CELLS]
     ax.plot(x, ref, "k_", ms=14, mew=1.4, label="sparse-none (alive)")
     ax.set_ylim(0, 1.0); ax.set_ylabel("success rate")
@@ -208,8 +212,10 @@ def fig_curves(curves):
                 continue
             bon = "e3b_idm" if "E3B" in lbl else "none"
             o = np.argsort(st)
-            ax.plot(np.array(st)[o] / 1e6, np.array(sc)[o], color=C[bon], lw=1.8,
-                    label=LBL[bon])
+            xs_ = np.array(st)[o] / 1e6
+            ys_ = pd.Series(np.array(sc)[o]).rolling(
+                max(3, len(sc) // 30), center=True, min_periods=1).mean().to_numpy()
+            ax.plot(xs_, ys_, color=C[bon], lw=1.8, label=LBL[bon])
         ax.axhline(chance, color="#c3c2b7", lw=1, ls=(0, (3, 3)))
         ax.set_ylim(0, 1.02); ax.set_xlabel("env steps (M)"); ax.set_title(title, loc="left", pad=8)
         ax.legend(loc="upper left", frameon=False)
