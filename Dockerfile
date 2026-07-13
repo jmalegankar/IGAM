@@ -90,7 +90,7 @@ RUN python -m pip install "pygame>=2.6" \
 # (cmake/build-essential installed above). CPU-only, no display/GL. NOTE: minihack
 # may pull a newer gymnasium; memory-gym is installed --no-deps above so its pin is
 # already decoupled.
-RUN python -m pip install ".[minihack]"
+# RUN python -m pip install ".[minihack]"
 
 # ── Runtime knobs the run_*.sh scripts read (all overridable at `docker run`) ─
 #   PYTHON   : no .venv in the image, so use the container interpreter.
@@ -107,7 +107,7 @@ ENV PYTHON=python \
 RUN python -c "import memrl, train, minigrid, wandb, stable_baselines3, memory_gym; print('imports OK')"
 
 # Sanity: validate the MiniHack env path at build time (nle build + the wrapper).
-RUN python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniHack-Memento-F2-v0', n_envs=1); e.reset(); print('minihack OK')"
+# RUN python -c "from memrl.envs import make_vec_env; e=make_vec_env('MiniHack-Memento-F2-v0', n_envs=1); e.reset(); print('minihack OK')"
 
 # Default command: run the full sweep (cells serial, seeds parallel within each).
 # Override with a per-cell script for one-pod-per-cell scheduling, e.g.:

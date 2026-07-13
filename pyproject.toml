@@ -31,11 +31,7 @@ wandb = [
 memory-gym = [
     "memory-gym",
 ]
-minihack = [
-    "minihack",              # MiniHack-Memento (E3B's benchmark; cue→retain→choose).
-    # Pulls `nle` (NetHack Learning Env) → C++ build; CPU-only, no display. System deps
-    # in the Dockerfile: cmake, build-essential, libbz2-dev, flex, bison.
-]
+
 
 [tool.setuptools.packages.find]
 include = ["memrl*"]
