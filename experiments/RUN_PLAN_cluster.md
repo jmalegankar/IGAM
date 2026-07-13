@@ -145,3 +145,41 @@ so it never re-submits done/in-flight work. Modes: `--mode staged` (default), `r
 - TODO local (additive, no cluster): I-4 (S13 cue-exposure geometry → the S13 axis row + the
   H-KNOB-B dose-response), I-7 (Tiny bonus discriminativeness), H-POT §3.1 Φ non-degeneracy
   diagnostic (needs the pulled PBIM penalty checkpoints).
+
+## PBIM2 — anchored-PBIM relaunch (2026-07-13)
+
+**Why.** Pre-fix `pbim.py` had no terminal anchor (boundary rows dropped from the V_int TD
+fit + terminal boundary term zeroed in delivery). Consequences: the S13 `V_int→3e6` runaway
+(γ=0.999·T=845) and a policy-dependent `γ^{T−1}Φ(s_{T−1})` telescoping leak everywhere.
+Fixed in `memrl/exploration/pbim.py` (Φ(terminal)=0: anchored fit + `−Φ(s_{T−1})` terminal
+delivery; `zero_bonus_on_done=False` so MemPPO keeps the boundary term). Validated:
+`python experiments/analysis/pbim_anchor_check.py` (exact telescoping to −Φ(s₀) + bounded
+long-horizon fit) and a 3-rollout MPG smoke (disc_sum −0.87±0.25 = −Φ(s₀), concentrated).
+
+**What.** ALL pbim arms rerun into FRESH projects (never mix with pre-fix runs):
+- `PBIM2MPG` → `memrl-mpg-pbim2` — 6 cells × {sparse, penalty, aligned} × n=5 = 90 runs, 20M.
+  Configs are byte-identical to the E1 twins except project/tags.
+- `PBIM2S13` → `memrl-s13-pbim2` — 6 cells × {sparseV3, sparseV7, freezeV3} × n=5 = 90 runs,
+  20M, S13 tuned HP (γ 0.999 / λ 0.98 / chunk 32 / lr 3e-4) via Density.cfg.
+Baselines (none/e3b_idm/noveld) in `memrl-memtrain-mpg` / `memrl-s13-matched` are unchanged —
+the new arms compare against them.
+
+**Order (image must contain the fix!).** Jai: commit + push `gated-lmu`, rebuild+push the
+image (it clones the branch at build), THEN:
+```bash
+DRY_RUN=1 EID=PBIM2MPG k8s/launch-memtrain-jobs.sh   # inspect
+EID=PBIM2MPG k8s/launch-memtrain-jobs.sh
+EID=PBIM2S13 k8s/launch-memtrain-jobs.sh
+```
+Remember the GPU-arch pin (cudaErrorNoKernelImageForDevice): keep the nodeSelector that
+worked for the S13-matched waves. Re-launch gaps later with
+`python -m experiments.memory_training.only_missing PBIM2MPG` (and `PBIM2S13`).
+
+**Health gates before trusting the data** (both projects, first ~2M steps):
+`intrinsic/pbim_V_int_mean` bounded (MPG O(50); S13 O(b̄·(1−γ^845)/(1−γ)) — NOT 1e5+),
+`pbim_ep_shaping_disc_sum_mean` negative & concentrated (≈−Φ(s₀)), `pbim_potential_loss`
+O(1). If S13 still runs away at γ=0.999, escalate to a target network — do not tune per-cell.
+
+**Paper effect.** ρ=0 / "PBIM can't rescue" re-tested on a faithful potential (exact
+telescoping by construction); S13-PBIM re-enters the grid (was dropped as diverged). The
+"terminal-Φ=0 convention" sentence in the paper becomes literally true of the code.

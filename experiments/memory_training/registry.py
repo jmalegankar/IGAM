@@ -268,6 +268,40 @@ METHODS = [
            [0, 1, 2, 3, 4], 10_000_000,
            "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
            "inert, not a floor artifact. Pairs with E15."),
+    # ── ANCHORED-PBIM RELAUNCH (2026-07-13) ──────────────────────────────────
+    # Pre-fix pbim.py had no terminal anchor: the V_int TD fit DROPPED boundary
+    # rows (pure bootstrap ⇒ Φ's constant mode unconstrained ⇒ the S13
+    # V_int→3e6 runaway at γ=0.999·T=845) and delivery zeroed the terminal
+    # boundary term (leaking a policy-dependent γ^{T−1}Φ(s_{T−1}) into the
+    # telescoping sum). Fixed in memrl/exploration/pbim.py (Φ(terminal)=0:
+    # anchored fit + −Φ(s_{T−1}) terminal delivery; validated by
+    # experiments/analysis/pbim_anchor_check.py). ALL pbim arms relaunch here
+    # into FRESH projects so analysis never mixes anchored with pre-fix runs;
+    # none/e3b/noveld arms in the original projects are untouched and remain
+    # the comparison baselines.
+    Method("PBIM2MPG", "Anchored-PBIM relaunch (MysteryPath, all 3 densities)",
+           "MysteryPath-Grid-v0", "memrl-mpg-pbim2", SIX, ["pbim_e3b_idm"],
+           [_mpg("sparse"), _mpg("penalty", reward_fall_off=-0.008),
+            _mpg("aligned", reward_path_progress=0.1)],
+           [0, 1, 2, 3, 4], 20_000_000,
+           "F3/ρ keystone on a faithful potential (exact telescoping by construction): "
+           "compare vs none/e3b_idm baselines in memrl-memtrain-mpg (unchanged)."),
+    Method("PBIM2S13", "Anchored-PBIM relaunch (S13-matched, all 3 densities)",
+           "MiniGrid-MemoryS13-v0", "memrl-s13-pbim2", SIX, ["pbim_e3b_idm"],
+           # Method has no hp field — S13's tuned HP rides in Density.cfg (merged
+           # last by _cfg, same values as the S13 EnvArm hp=). train.py forwards
+           # cfg gamma to the PBIM head, so head-γ==PPO-γ==0.999 automatically.
+           [Density("sparseV3", env_kwargs={"agent_view_size": 3, "reward_mode": "flat"},
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
+            Density("sparseV7", env_kwargs={"agent_view_size": 7, "reward_mode": "flat"},
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
+            Density("freezeV3", env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
+                                            "move_penalty": 1.0 / 845},
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
+           [0, 1, 2, 3, 4], 20_000_000,
+           "S13-PBIM re-entry: with the anchor the γ=0.999/T=845 fit is grounded (no "
+           "runaway) — watch pbim_V_int_mean (expect O(b̄/(1−γ)·(1−γ^T)) not 1e6) and "
+           "pbim_ep_shaping_disc_sum (expect ≈−Φ(s₀), concentrated) before trusting arms."),
 ]
 METHOD = {m.eid: m for m in METHODS}
 

@@ -26,7 +26,9 @@ from memrl.cell import (
     LSTM,
     SHM,
     DeltaNet,
+    GatedDeltaNet,
     GatedLMU,
+    Memoryless,
     SelectiveLMU,
     LinearTransformer,
     Mamba2,
@@ -47,6 +49,8 @@ CELL_FACTORIES: dict[str, Callable[[int, int], RecurrentCell]] = {
     "S4D":               lambda i, h: S4D(i, h, d_state=16),
     "Mamba2":            lambda i, h: Mamba2(i, h, n_heads=2, d_state=16),
     "DeltaNet":          lambda i, h: DeltaNet(i, h, n_heads=2),
+    "GatedDeltaNet":     lambda i, h: GatedDeltaNet(i, h, assoc_size=16),
+    "Memoryless":        lambda i, h: Memoryless(i, h),
     "RetNet":            lambda i, h: RetNet(i, h, n_heads=2),
     "mLSTM":             lambda i, h: mLSTM(i, h, n_heads=2),
     "SHM":               lambda i, h: SHM(i, h, L=32),  # smaller L for fast tests

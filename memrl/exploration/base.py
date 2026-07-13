@@ -27,6 +27,12 @@ class IntrinsicRewardModule(nn.Module, ABC):
     episodic state (e.g. plain RND) can leave them alone.
     """
 
+    # If True (default), MemPPO zeroes this module's bonus on done steps — the
+    # fresh-episodic-state misattribution fix (see collect_rollouts). Modules
+    # that emit a MEANINGFUL boundary-step value (PBIM's terminal potential
+    # difference −Φ(s_{T−1})) set this False and handle boundaries themselves.
+    zero_bonus_on_done: bool = True
+
     def __init__(self, n_envs: int, device: torch.device | str = "cpu") -> None:
         super().__init__()
         self.n_envs = n_envs

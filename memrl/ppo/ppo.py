@@ -332,7 +332,11 @@ class MemPPO(PPO):
                 # α<0 result). Zero the bonus on terminated envs so the terminal
                 # transition carries extrinsic reward only. Costs the e3b arm one
                 # step's bonus per episode — symmetric and negligible.
-                if np.any(dones):
+                # Modules with zero_bonus_on_done=False (PBIM) emit a meaningful
+                # boundary value on done steps (the terminal potential difference
+                # −Φ(s_{T−1}), required for exact telescoping) — leave it intact.
+                if np.any(dones) and getattr(self.intrinsic_module,
+                                             "zero_bonus_on_done", True):
                     bonus = np.asarray(bonus, dtype=np.float32).copy()
                     bonus[np.asarray(dones, dtype=bool)] = 0.0
                 rewards = rewards.astype(np.float32) + self.lambda_intrinsic * bonus

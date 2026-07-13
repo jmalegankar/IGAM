@@ -39,7 +39,10 @@ class TestInitState:
         name, factory = cell_name_and_factory
         cell = _make_cell(factory)
         s = cell.init_state(BATCH_SIZE)
-        assert isinstance(s, dict) and len(s) > 0, f"{name}: empty state dict"
+        assert isinstance(s, dict), f"{name}: init_state must return a dict"
+        # Memoryless is stateless by design: an empty dict is its contract.
+        if name != "Memoryless":
+            assert len(s) > 0, f"{name}: empty state dict"
         for k, v in s.items():
             assert isinstance(v, Tensor), f"{name}: state[{k!r}] not a Tensor"
             assert v.shape[0] == BATCH_SIZE, f"{name}: state[{k!r}] batch dim {v.shape[0]} != {BATCH_SIZE}"

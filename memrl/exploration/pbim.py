@@ -48,6 +48,29 @@ NOTE on the ≥0 contract: unlike other intrinsic modules, PBIM returns a SIGNED
 shaping term (potential differences are negative as often as positive). This is
 correct — PPO adds `lambda_intrinsic * bonus` to the reward (ppo.py) and a signed
 PBRS term is exactly what policy-invariance requires. Do not clip it to ≥0.
+
+Episodic boundary handling (the terminal-Φ=0 anchor)
+----------------------------------------------------
+Episodic PBRS is only policy-invariant if the terminal potential is a constant
+(Ng et al. 1999, episodic case; Forbes et al. 2024 build their corrections on
+exactly this point). We adopt the standard convention Φ(terminal) ≡ 0, enforced
+in BOTH places it matters:
+
+  * DELIVERY — on a done step the true transition is (s_{T−1} → s_T) with
+    Φ(s_T)=0, so the shaping delivered at the terminal step is
+    F_{T−1} = γ·0 − Φ(s_{T−1}) = −Φ(s_{T−1}). With it, the discounted per-episode
+    shaping sum telescopes EXACTLY to −Φ(s_0) (endpoint-only ⇒ invariant); without
+    it, a policy-dependent γ^{T−1}Φ(s_{T−1}) residual leaks. PBIM therefore sets
+    `zero_bonus_on_done = False` (MemPPO's done-step zeroing is E3B-motivated and
+    would clobber this term).
+  * TD FIT — boundary rows anchor V(φ(s_{T−1})) toward 0 instead of being dropped.
+    Without any anchored row the fit is a pure bootstrap: the constant mode of Φ
+    is unconstrained and drifts (≈(1−γ)·c residual per step), which at γ→1 on long
+    horizons runs away — this is the exact mechanism behind the observed
+    V_int→3×10⁶ divergence on MiniGrid-MemoryS13 (γ=0.999, T=845) while short-
+    horizon MysteryPath (γ=0.995, T=128) stayed bounded. The anchor pins the mode.
+    (The anchor assumes the final one-step bonus ≈0 — a one-step endpoint bias
+    that does not affect potential validity: any bounded Φ is a valid potential.)
 """
 
 from __future__ import annotations
@@ -66,6 +89,9 @@ from .e3b_module import E3BIDM
 class PBIM(IntrinsicRewardModule):
     """Potential-based wrapper around an episodic intrinsic module.
 
+    Emits the terminal boundary term −Φ(s_{T−1}) on done steps (see module
+    docstring) — MemPPO must NOT zero it (`zero_bonus_on_done = False`).
+
     Args:
         base:            an instantiated IntrinsicRewardModule with a `.phi`
                          feature source (E3BIDM is the intended base).
@@ -78,6 +104,8 @@ class PBIM(IntrinsicRewardModule):
                          scale as the raw bonus; the paper holds lambda_intrinsic
                          fixed across arms and tunes nothing here).
     """
+
+    zero_bonus_on_done = False
 
     def __init__(
         self,
@@ -145,14 +173,17 @@ class PBIM(IntrinsicRewardModule):
         feat_s = self._phi_feat(last_obs, side, cell_state)
         feat_s2 = self._phi_feat(obs, side, cell_state)
 
-        # 3) shaped reward F_t = γ Φ(s_{t+1}) − Φ(s_t), zeroed across resets
-        #    (episode_start[i]=True ⇒ (last_obs_i → obs_i) straddles an auto-reset,
-        #    not a real transition).
+        # 3) shaped reward F_t = γ Φ(s_{t+1}) − Φ(s_t). On done rows
+        #    (episode_start[i]=True) the observed obs_i is the auto-reset obs, but
+        #    the TRUE transition is (last_obs_i → terminal) with Φ(terminal) ≡ 0,
+        #    so deliver the boundary term F = γ·0 − Φ(s_{T−1}) = −Φ(s_{T−1}).
+        #    This makes the per-episode discounted shaping sum telescope exactly
+        #    to −Φ(s_0); zeroing instead leaks a policy-dependent γ^{T−1}Φ(s_{T−1}).
         V_s = self._potential(feat_s)
         V_s2 = self._potential(feat_s2)
         F = self.gamma * V_s2 - V_s
         es = torch.as_tensor(np.asarray(episode_start, dtype=bool), device=self.device)
-        F = torch.where(es, torch.zeros_like(F), F)
+        F = torch.where(es, -V_s, F)
         F_np = (self.scale * F).detach().cpu().numpy().astype(np.float32)
         F_np = np.nan_to_num(F_np, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -163,23 +194,28 @@ class PBIM(IntrinsicRewardModule):
         self._boundary.append(np.asarray(episode_start, dtype=bool))
 
         # 4b) telescoping / return-neutrality check: the DISCOUNTED per-episode
-        #     shaping sum Σ_t γ^t F_t. For a true potential this telescopes to
-        #     γ^T Φ(s_T) − Φ(s_0) — endpoint-only, so it must stay SMALL and
-        #     BOUNDED, not grow with episode return/length. A large/return-
-        #     correlated value ⇒ the "potential" is not telescoping (the
-        #     shaping-instability the P5 caveat warns about).
+        #     shaping sum Σ_t γ^t F_t. With the terminal boundary term delivered
+        #     (step 3), this telescopes EXACTLY to −Φ(s_0) — endpoint-only, so it
+        #     must CONCENTRATE (start-state variation only) and stay BOUNDED, not
+        #     grow with episode return/length. A large/return-correlated value ⇒
+        #     the "potential" is not telescoping (the shaping-instability the P5
+        #     caveat warns about).
+        #     NOTE the done row IS the closing episode's terminal step: its F
+        #     (−Φ(s_{T−1})) is added at the OLD discount γ^{T−1} BEFORE the
+        #     episode's sum is closed out and the counters reset.
         es_arr = np.asarray(episode_start, dtype=bool)
         if getattr(self, "_disc_sum", None) is None or self._disc_sum.shape != F_np.shape:
             self._disc_sum = np.zeros_like(F_np)
             self._gamma_pow = np.ones_like(F_np)
             self._ep_F_buf: list[float] = []
+        self._disc_sum += self._gamma_pow * F_np
         for i in range(F_np.shape[0]):
-            if es_arr[i]:                                  # previous episode ended
+            if es_arr[i]:                                  # this row ended the episode
                 self._ep_F_buf.append(float(self._disc_sum[i]))
                 self._disc_sum[i] = 0.0
                 self._gamma_pow[i] = 1.0
-        self._disc_sum += self._gamma_pow * F_np           # F_np is 0 at resets
-        self._gamma_pow *= self.gamma
+            else:
+                self._gamma_pow[i] *= self.gamma
 
         self._record_bonus(F_np)  # diagnostics track the SHAPED term
         return F_np
@@ -196,9 +232,7 @@ class PBIM(IntrinsicRewardModule):
         s = torch.as_tensor(np.concatenate(self._feat_s, 0), device=self.device)
         s2 = torch.as_tensor(np.concatenate(self._feat_s2, 0), device=self.device)
         b = torch.as_tensor(np.concatenate(self._raw_b, 0), device=self.device)
-        # Within-episode transitions only (a reset boundary breaks telescoping).
-        keep = ~torch.as_tensor(np.concatenate(self._boundary, 0), device=self.device)
-        s, s2, b = s[keep], s2[keep], b[keep]
+        bnd = torch.as_tensor(np.concatenate(self._boundary, 0), device=self.device)
 
         last_loss = 0.0
         if s.shape[0] > 0:
@@ -209,7 +243,14 @@ class PBIM(IntrinsicRewardModule):
                 for i in range(0, N, bs):
                     idx = perm[i:i + bs]
                     with torch.no_grad():
-                        target = b[idx] + self.gamma * self.potential(s2[idx]).squeeze(-1)
+                        # Terminal anchor (Φ(terminal)=0): boundary rows fit
+                        # V(φ(s_{T−1})) toward 0. Their stored b/s2 belong to the
+                        # NEXT episode's reset obs (junk here) — the where() masks
+                        # both out. Without any anchored row the fit is a pure
+                        # bootstrap and Φ's constant mode drifts unboundedly at
+                        # γ→1 (the S13 V_int→3e6 runaway).
+                        boot = b[idx] + self.gamma * self.potential(s2[idx]).squeeze(-1)
+                        target = torch.where(bnd[idx], torch.zeros_like(boot), boot)
                     pred = self.potential(s[idx]).squeeze(-1)
                     loss = torch.mean((pred - target) ** 2)
                     self.opt.zero_grad(set_to_none=True)
