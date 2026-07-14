@@ -146,40 +146,50 @@ so it never re-submits done/in-flight work. Modes: `--mode staged` (default), `r
   H-KNOB-B dose-response), I-7 (Tiny bonus discriminativeness), H-POT §3.1 Φ non-degeneracy
   diagnostic (needs the pulled PBIM penalty checkpoints).
 
-## PBIM2 — anchored-PBIM relaunch (2026-07-13)
+## PBIM3 — NORMALIZED-PBIM relaunch (2026-07-13, supersedes PBIM2)
 
-**Why.** Pre-fix `pbim.py` had no terminal anchor (boundary rows dropped from the V_int TD
-fit + terminal boundary term zeroed in delivery). Consequences: the S13 `V_int→3e6` runaway
-(γ=0.999·T=845) and a policy-dependent `γ^{T−1}Φ(s_{T−1})` telescoping leak everywhere.
-Fixed in `memrl/exploration/pbim.py` (Φ(terminal)=0: anchored fit + `−Φ(s_{T−1})` terminal
-delivery; `zero_bonus_on_done=False` so MemPPO keeps the boundary term). Validated:
-`python experiments/analysis/pbim_anchor_check.py` (exact telescoping to −Φ(s₀) + bounded
-long-horizon fit) and a 3-rollout MPG smoke (disc_sum −0.87±0.25 = −Φ(s₀), concentrated).
+**History.** Three PBIM attempts:
+1. *original* (in memrl-memtrain-mpg / memrl-s13-matched): no terminal anchor → S13 `V_int→3e6`
+   runaway. Dropped.
+2. *pbim2* (memrl-mpg-pbim2 / memrl-s13-pbim2): anchored, Φ=+V_int. Bounded — the anchor worked —
+   but delivered `−(b)` (consumption sign) with an UN-centered ~50-scale terminal kick
+   (λ·Φ≈1.6 > +1 task reward). Result: agents ran out the clock to dodge the kick
+   (**ep_len 8→845, success→0 on every arm with a baseline**). A real sign+magnitude pathology.
+   *Kill these jobs; keep the runs as the "why normalize" ablation.*
+3. **pbim3 (THIS): faithful normalized PBIM (Forbes et al. 2024, Eq. 34).** Φ=−V_int of the
+   running-mean-**centered** bonus → delivery is `+（b−b̄)` (same direction as raw e3b), tiny
+   magnitude, exact telescoping to `+V_int(s₀)≈0`. `zero_bonus_on_done=False`.
 
-**What.** ALL pbim arms rerun into FRESH projects (never mix with pre-fix runs):
-- `PBIM2MPG` → `memrl-mpg-pbim2` — 6 cells × {sparse, penalty, aligned} × n=5 = 90 runs, 20M.
-  Configs are byte-identical to the E1 twins except project/tags.
-- `PBIM2S13` → `memrl-s13-pbim2` — 6 cells × {sparseV3, sparseV7, freezeV3} × n=5 = 90 runs,
-  20M, S13 tuned HP (γ 0.999 / λ 0.98 / chunk 32 / lr 3e-4) via Density.cfg.
-Baselines (none/e3b_idm/noveld) in `memrl-memtrain-mpg` / `memrl-s13-matched` are unchanged —
-the new arms compare against them.
+**Validated (bench + smoke).** `python experiments/analysis/pbim_anchor_check.py`: sign corr=1.000
+(delivers +（b−b̄), not −b), telescoping resid<1e-3, γ=0.999 centered max|Φ|=0.02 vs un-centered
+56.4 (λ·terminal|F| 1.62→0.0002). Trainer smoke (MPG penalty): `bonus_mean` −0.5→~0, `V_int`~0.01,
+`disc_sum`~0, clean. The stall's mechanistic cause (the spike) is gone.
 
-**Order (image must contain the fix!).** Jai: commit + push `gated-lmu`, rebuild+push the
-image (it clones the branch at build), THEN:
+**What.** ALL pbim arms into FRESH projects (never mix with pbim2/original):
+- `PBIM3MPG` → `memrl-mpg-pbim3` — 6 cells × {sparse, penalty, aligned} × n=5 = 90 runs, 20M.
+- `PBIM3S13` → `memrl-s13-pbim3` — 6 cells × {sparseV3, sparseV7, freezeV3} × n=5 = 90 runs, 20M,
+  S13 tuned HP (γ 0.999 / λ 0.98 / chunk 32 / lr 3e-4) via Density.cfg.
+Baselines (none/e3b_idm/noveld) in `memrl-memtrain-mpg` / `memrl-s13-matched` unchanged.
+
+**Order (image must contain the fix!).** Jai: **kill the running pbim2 jobs**, commit + push
+`gated-lmu`, rebuild+push the image (clones the branch at build), THEN:
 ```bash
-DRY_RUN=1 EID=PBIM2MPG k8s/launch-memtrain-jobs.sh   # inspect
-EID=PBIM2MPG k8s/launch-memtrain-jobs.sh
-EID=PBIM2S13 k8s/launch-memtrain-jobs.sh
+DRY_RUN=1 EID=PBIM3MPG k8s/launch-memtrain-jobs.sh   # inspect
+EID=PBIM3MPG k8s/launch-memtrain-jobs.sh
+EID=PBIM3S13 k8s/launch-memtrain-jobs.sh
 ```
-Remember the GPU-arch pin (cudaErrorNoKernelImageForDevice): keep the nodeSelector that
-worked for the S13-matched waves. Re-launch gaps later with
-`python -m experiments.memory_training.only_missing PBIM2MPG` (and `PBIM2S13`).
+GPU-arch pin (cudaErrorNoKernelImageForDevice): keep the nodeSelector from the S13-matched waves
+— the pbim2 MPG relaunch had 72/117 fail without it. Gaps: `only_missing PBIM3MPG` / `PBIM3S13`.
 
-**Health gates before trusting the data** (both projects, first ~2M steps):
-`intrinsic/pbim_V_int_mean` bounded (MPG O(50); S13 O(b̄·(1−γ^845)/(1−γ)) — NOT 1e5+),
-`pbim_ep_shaping_disc_sum_mean` negative & concentrated (≈−Φ(s₀)), `pbim_potential_loss`
-O(1). If S13 still runs away at γ=0.999, escalate to a target network — do not tune per-cell.
+**Health gates (both projects, first ~2M steps) — the stall MUST be gone:**
+`eval/mean_ep_length` ≈ the `none` baseline (S13 ~8–17, NOT ~845), `intrinsic/pbim_V_int_mean`
+O(0.01) (NOT 50+), `pbim_ep_shaping_disc_sum_mean` small (concentrated), `pbim_potential_loss` O(1).
+If ep_len still pins to timeout, the delivery magnitude is still too high — ping, don't tune per-cell.
+NOTE (audit): `pbim_ep_shaping_disc_sum_mean` reads small-but-NONZERO (~1e-3) even when correct —
+V_int retrains mid-episode (episodes span rollouts), so the telescoping witness is only approximate
+across rollout boundaries. Only a LARGE or GROWING value signals instability; ~1e-3 is healthy.
 
-**Paper effect.** ρ=0 / "PBIM can't rescue" re-tested on a faithful potential (exact
-telescoping by construction); S13-PBIM re-enters the grid (was dropped as diverged). The
-"terminal-Φ=0 convention" sentence in the paper becomes literally true of the code.
+**Paper effect.** This is the honest steelman: `+（b−b̄)` gives PBIM the SAME per-step guidance as
+raw e3b, de-biased — so "does densified e3b help?" is finally a fair test. ρ=0 keystone re-tested
+on a faithful, magnitude-controlled potential; S13-PBIM re-enters without the stall confound. The
+arm is now literally Forbes PBIM (drop the "-style" qualifier in the paper).

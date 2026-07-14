@@ -49,28 +49,31 @@ shaping term (potential differences are negative as often as positive). This is
 correct — PPO adds `lambda_intrinsic * bonus` to the reward (ppo.py) and a signed
 PBRS term is exactly what policy-invariance requires. Do not clip it to ≥0.
 
-Episodic boundary handling (the terminal-Φ=0 anchor)
-----------------------------------------------------
-Episodic PBRS is only policy-invariant if the terminal potential is a constant
-(Ng et al. 1999, episodic case; Forbes et al. 2024 build their corrections on
-exactly this point). We adopt the standard convention Φ(terminal) ≡ 0, enforced
-in BOTH places it matters:
+Sign, normalization, and the episodic boundary (following Forbes Eq. 34)
+------------------------------------------------------------------------
+Three ingredients make this the faithful, normalized PBIM rather than a raw
+learned-value potential:
 
-  * DELIVERY — on a done step the true transition is (s_{T−1} → s_T) with
-    Φ(s_T)=0, so the shaping delivered at the terminal step is
-    F_{T−1} = γ·0 − Φ(s_{T−1}) = −Φ(s_{T−1}). With it, the discounted per-episode
-    shaping sum telescopes EXACTLY to −Φ(s_0) (endpoint-only ⇒ invariant); without
-    it, a policy-dependent γ^{T−1}Φ(s_{T−1}) residual leaks. PBIM therefore sets
-    `zero_bonus_on_done = False` (MemPPO's done-step zeroing is E3B-motivated and
-    would clobber this term).
-  * TD FIT — boundary rows anchor V(φ(s_{T−1})) toward 0 instead of being dropped.
-    Without any anchored row the fit is a pure bootstrap: the constant mode of Φ
-    is unconstrained and drifts (≈(1−γ)·c residual per step), which at γ→1 on long
-    horizons runs away — this is the exact mechanism behind the observed
-    V_int→3×10⁶ divergence on MiniGrid-MemoryS13 (γ=0.999, T=845) while short-
-    horizon MysteryPath (γ=0.995, T=128) stayed bounded. The anchor pins the mode.
-    (The anchor assumes the final one-step bonus ≈0 — a one-step endpoint bias
-    that does not affect potential validity: any bounded Φ is a valid potential.)
+  * SIGN — Forbes' potential is Φ_F = −V_int, so the interior shaping is
+    F_t = γΦ_F(s_{t+1}) − Φ_F(s_t) = +(b − b̄): the SAME directional guidance as
+    the raw bonus (what the densification arm must test). The naive Φ = +V_int
+    delivers −(b − b̄) (the "consumption" sign), which pushes learning the wrong
+    way; we realize Φ_F by delivering V_int(s_t) − γV_int(s_{t+1}).
+  * NORMALIZATION (Eq. 34) — we center the raw bonus by a running mean b̄ before
+    it enters the potential. This keeps every per-step F small so no single
+    (terminal) step dominates the +1 task reward — the un-normalized, uncentered
+    version drove a stall/spike pathology (agents ran out the clock to avoid the
+    large −Φ(s_{T−1}) terminal kick) — and makes the fit target ~0-mean so V_int
+    is bounded even at γ→1 (this is what actually prevents the S13 V_int→3×10⁶
+    runaway; the terminal anchor below is then belt-and-suspenders).
+  * TERMINAL Φ=0, enforced in BOTH places. DELIVERY: on a done step the true
+    transition is (s_{T−1} → terminal) with Φ_F(terminal)=0, so the boundary term
+    is γ·0 − Φ_F(s_{T−1}) = +V_int(s_{T−1}); the per-episode discounted shaping sum
+    then telescopes EXACTLY to +V_int(s_0) ≈ 0 (endpoint-only ⇒ invariant). PBIM
+    sets `zero_bonus_on_done = False` so MemPPO's E3B-motivated done-step zeroing
+    doesn't clobber it. TD FIT: boundary rows anchor V(φ(s_{T−1})) toward 0 rather
+    than being dropped (a dropped-boundary pure bootstrap lets the constant mode
+    drift; centering already removes the drift's fuel, the anchor pins the mode).
 """
 
 from __future__ import annotations
@@ -143,8 +146,20 @@ class PBIM(IntrinsicRewardModule):
 
         self.opt = torch.optim.Adam(self.potential.parameters(), lr=lr)
 
+        # Running mean b̄ of the RAW bonus (Forbes Eq. 34 normalization). We
+        # center the bonus (b − b̄) before it enters the potential, both in the
+        # fit target and — via the Bellman identity — in the delivered F. This
+        # (a) matches Forbes' preferred normalized transform, (b) keeps the
+        # per-step shaping small so no single terminal step dominates the +1 task
+        # reward (the stall/spike pathology of the un-normalized version), and
+        # (c) makes the fit target ~0-mean so V_int stays bounded even at γ→1 on
+        # long horizons — centering removes the divergence at its source, the
+        # terminal anchor is then just belt-and-suspenders.
+        self._bonus_ema: float = 0.0
+        self._ema_momentum: float = 0.99
+
         # Transition buffer of φ-FEATURES (small) for fitting V_int.
-        # Stores (phi_s, phi_s2, raw_b, cross_boundary) per env per step.
+        # Stores (phi_s, phi_s2, centered_b, cross_boundary) per env per step.
         self._feat_s: list[np.ndarray] = []
         self._feat_s2: list[np.ndarray] = []
         self._raw_b: list[np.ndarray] = []
@@ -165,43 +180,60 @@ class PBIM(IntrinsicRewardModule):
     @torch.no_grad()
     def compute(self, obs, last_obs, action, episode_start, side, cell_state) -> np.ndarray:
         # 1) advance the base module (updates the episodic ellipsoid, records its
-        #    own raw-bonus diagnostics) and grab the raw bonus as the V_int target.
+        #    own raw-bonus diagnostics) and grab the raw bonus.
         raw_b = self.base.compute(obs, last_obs, action, episode_start, side, cell_state)
-        raw_b = np.asarray(raw_b, dtype=np.float32)
+        raw_b = np.nan_to_num(np.asarray(raw_b, dtype=np.float32),
+                              nan=0.0, posinf=0.0, neginf=0.0)
+
+        # 1b) center by the running mean b̄ (Forbes Eq. 34). The potential is the
+        #     value of the CENTERED bonus, so the delivered guidance is +（b − b̄)
+        #     (same direction as raw e3b, de-biased) rather than the raw bonus.
+        #     Sanitize before it enters the fit target: a non-finite b̄ would make
+        #     the potential head all-NaN with no recovery (Adam never un-NaNs),
+        #     and the delivered F is nan_to_num'd downstream so it would silently
+        #     mask a dead potential. Cheap insurance (inert with the E3B base).
+        b_centered = np.nan_to_num(raw_b - self._bonus_ema,
+                                   nan=0.0, posinf=0.0, neginf=0.0)
+        self._bonus_ema = (self._ema_momentum * self._bonus_ema
+                           + (1.0 - self._ema_momentum) * float(raw_b.mean()))
 
         # 2) features for s_t (last_obs) and s_{t+1} (obs).
         feat_s = self._phi_feat(last_obs, side, cell_state)
         feat_s2 = self._phi_feat(obs, side, cell_state)
 
-        # 3) shaped reward F_t = γ Φ(s_{t+1}) − Φ(s_t). On done rows
-        #    (episode_start[i]=True) the observed obs_i is the auto-reset obs, but
-        #    the TRUE transition is (last_obs_i → terminal) with Φ(terminal) ≡ 0,
-        #    so deliver the boundary term F = γ·0 − Φ(s_{T−1}) = −Φ(s_{T−1}).
-        #    This makes the per-episode discounted shaping sum telescope exactly
-        #    to −Φ(s_0); zeroing instead leaks a policy-dependent γ^{T−1}Φ(s_{T−1}).
+        # 3) shaped reward. With Φ = V_int(centered bonus) the potential-difference
+        #    γΦ(s_{t+1}) − Φ(s_t) equals −(b − b̄) by the Bellman identity — the
+        #    "consumption" sign. Forbes' potential is Φ_F = −V_int, which delivers
+        #    +(b − b̄): the SAME directional guidance as the raw bonus (what the
+        #    densification arm must test), just de-biased. We realize Φ_F by
+        #    NEGATING the difference here. On done rows the true transition is
+        #    (s_{T−1} → terminal) with Φ_F(terminal) ≡ 0, so the boundary term is
+        #    γ·0 − Φ_F(s_{T−1}) = +V_int(s_{T−1}); the per-episode discounted
+        #    shaping sum then telescopes exactly to +V_int(s_0) ≈ 0 (centered),
+        #    endpoint-only ⇒ policy-invariant.
         V_s = self._potential(feat_s)
         V_s2 = self._potential(feat_s2)
-        F = self.gamma * V_s2 - V_s
+        F = V_s - self.gamma * V_s2                    # = +(b − b̄) interior (Bellman)
         es = torch.as_tensor(np.asarray(episode_start, dtype=bool), device=self.device)
-        F = torch.where(es, -V_s, F)
+        F = torch.where(es, V_s, F)                    # terminal: +V_int(s_{T−1})
         F_np = (self.scale * F).detach().cpu().numpy().astype(np.float32)
         F_np = np.nan_to_num(F_np, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # 4) stash features + target for the V_int fit in update().
+        # 4) stash features + CENTERED target for the V_int fit in update().
         self._feat_s.append(feat_s.detach().cpu().numpy())
         self._feat_s2.append(feat_s2.detach().cpu().numpy())
-        self._raw_b.append(raw_b)
+        self._raw_b.append(b_centered)
         self._boundary.append(np.asarray(episode_start, dtype=bool))
 
         # 4b) telescoping / return-neutrality check: the DISCOUNTED per-episode
         #     shaping sum Σ_t γ^t F_t. With the terminal boundary term delivered
-        #     (step 3), this telescopes EXACTLY to −Φ(s_0) — endpoint-only, so it
-        #     must CONCENTRATE (start-state variation only) and stay BOUNDED, not
-        #     grow with episode return/length. A large/return-correlated value ⇒
-        #     the "potential" is not telescoping (the shaping-instability the P5
-        #     caveat warns about).
+        #     (step 3), this telescopes EXACTLY to +V_int(s_0) — endpoint-only, so
+        #     it must CONCENTRATE (start-state variation only) and stay BOUNDED and
+        #     NEAR ZERO (V_int is the value of the ~0-mean CENTERED bonus). A large
+        #     or return-correlated value ⇒ the "potential" is not telescoping (the
+        #     shaping-instability the P5 caveat warns about).
         #     NOTE the done row IS the closing episode's terminal step: its F
-        #     (−Φ(s_{T−1})) is added at the OLD discount γ^{T−1} BEFORE the
+        #     (+V_int(s_{T−1})) is added at the OLD discount γ^{T−1} BEFORE the
         #     episode's sum is closed out and the counters reset.
         es_arr = np.asarray(episode_start, dtype=bool)
         if getattr(self, "_disc_sum", None) is None or self._disc_sum.shape != F_np.shape:
@@ -225,7 +257,7 @@ class PBIM(IntrinsicRewardModule):
         # (a) train the base's learned φ / IDM exactly as usual.
         base_diag = self.base.update(rollout)
 
-        # (b) fit V_int by TD on the buffered raw-bonus stream.
+        # (b) fit V_int by TD on the buffered CENTERED-bonus stream.
         if not self._feat_s:
             return {f"base_{k}": v for k, v in base_diag.items()}
 

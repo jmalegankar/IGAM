@@ -268,26 +268,33 @@ METHODS = [
            [0, 1, 2, 3, 4], 10_000_000,
            "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
            "inert, not a floor artifact. Pairs with E15."),
-    # ── ANCHORED-PBIM RELAUNCH (2026-07-13) ──────────────────────────────────
-    # Pre-fix pbim.py had no terminal anchor: the V_int TD fit DROPPED boundary
-    # rows (pure bootstrap ⇒ Φ's constant mode unconstrained ⇒ the S13
-    # V_int→3e6 runaway at γ=0.999·T=845) and delivery zeroed the terminal
-    # boundary term (leaking a policy-dependent γ^{T−1}Φ(s_{T−1}) into the
-    # telescoping sum). Fixed in memrl/exploration/pbim.py (Φ(terminal)=0:
-    # anchored fit + −Φ(s_{T−1}) terminal delivery; validated by
-    # experiments/analysis/pbim_anchor_check.py). ALL pbim arms relaunch here
-    # into FRESH projects so analysis never mixes anchored with pre-fix runs;
-    # none/e3b/noveld arms in the original projects are untouched and remain
-    # the comparison baselines.
-    Method("PBIM2MPG", "Anchored-PBIM relaunch (MysteryPath, all 3 densities)",
-           "MysteryPath-Grid-v0", "memrl-mpg-pbim2", SIX, ["pbim_e3b_idm"],
+    # ── NORMALIZED-PBIM RELAUNCH — pbim3 (2026-07-13) ─────────────────────────
+    # Two prior PBIM attempts, both superseded:
+    #   • original (memrl-memtrain-mpg / memrl-s13-matched): no terminal anchor →
+    #     S13 V_int→3e6 runaway at γ=0.999·T=845. DROPPED.
+    #   • pbim2 (memrl-mpg-pbim2 / memrl-s13-pbim2): anchored + Φ=+V_int. Bounded,
+    #     but delivered −(b) (consumption sign) with an UN-centered ~50-scale
+    #     terminal spike (λ·Φ≈1.6 > +1 task reward) → agents ran out the clock to
+    #     dodge the terminal kick (ep_len 8→845, success→0 on every arm with a
+    #     baseline). A real magnitude/sign pathology, kept as the "why normalize"
+    #     ablation.
+    # pbim3 = faithful NORMALIZED PBIM (Forbes et al. 2024, Eq. 34): Φ=−V_int of
+    # the running-mean-CENTERED bonus, so delivery is +（b−b̄) (raw-e3b direction),
+    # tiny magnitude (no spike/stall), exact telescoping to +V_int(s₀)≈0. Validated
+    # on the bench by experiments/analysis/pbim_anchor_check.py (sign corr=1.000,
+    # telescoping resid<1e-3, γ=0.999 max|Φ| 56→0.02) + a trainer smoke (bonus_mean
+    # −0.5→~0). FRESH projects so analysis never mixes normalized with pbim2/orig;
+    # none/e3b/noveld baselines in the original projects are untouched.
+    Method("PBIM3MPG", "Normalized-PBIM relaunch (MysteryPath, all 3 densities)",
+           "MysteryPath-Grid-v0", "memrl-mpg-pbim3", SIX, ["pbim_e3b_idm"],
            [_mpg("sparse"), _mpg("penalty", reward_fall_off=-0.008),
             _mpg("aligned", reward_path_progress=0.1)],
            [0, 1, 2, 3, 4], 20_000_000,
-           "F3/ρ keystone on a faithful potential (exact telescoping by construction): "
-           "compare vs none/e3b_idm baselines in memrl-memtrain-mpg (unchanged)."),
-    Method("PBIM2S13", "Anchored-PBIM relaunch (S13-matched, all 3 densities)",
-           "MiniGrid-MemoryS13-v0", "memrl-s13-pbim2", SIX, ["pbim_e3b_idm"],
+           "F3/ρ keystone on the faithful normalized potential (+（b−b̄) guidance, exact "
+           "telescoping): compare vs none/e3b_idm baselines in memrl-memtrain-mpg (unchanged) "
+           "and vs the un-normalized stall in memrl-mpg-pbim2."),
+    Method("PBIM3S13", "Normalized-PBIM relaunch (S13-matched, all 3 densities)",
+           "MiniGrid-MemoryS13-v0", "memrl-s13-pbim3", SIX, ["pbim_e3b_idm"],
            # Method has no hp field — S13's tuned HP rides in Density.cfg (merged
            # last by _cfg, same values as the S13 EnvArm hp=). train.py forwards
            # cfg gamma to the PBIM head, so head-γ==PPO-γ==0.999 automatically.
@@ -299,9 +306,9 @@ METHODS = [
                                             "move_penalty": 1.0 / 845},
                     cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
            [0, 1, 2, 3, 4], 20_000_000,
-           "S13-PBIM re-entry: with the anchor the γ=0.999/T=845 fit is grounded (no "
-           "runaway) — watch pbim_V_int_mean (expect O(b̄/(1−γ)·(1−γ^T)) not 1e6) and "
-           "pbim_ep_shaping_disc_sum (expect ≈−Φ(s₀), concentrated) before trusting arms."),
+           "S13-PBIM the fair way: normalized +（b−b̄) delivery — the ep_len 8→845 stall must be "
+           "GONE (watch eval/mean_ep_length ≈ none's, pbim_V_int_mean O(0.01), disc_sum ≈0) "
+           "before trusting arms. This is the honest 'does densified e3b help retention?' test."),
 ]
 METHOD = {m.eid: m for m in METHODS}
 
