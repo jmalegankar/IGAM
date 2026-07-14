@@ -293,22 +293,30 @@ METHODS = [
            "F3/ρ keystone on the faithful normalized potential (+（b−b̄) guidance, exact "
            "telescoping): compare vs none/e3b_idm baselines in memrl-memtrain-mpg (unchanged) "
            "and vs the un-normalized stall in memrl-mpg-pbim2."),
-    Method("PBIM3S13", "Normalized-PBIM relaunch (S13-matched, all 3 densities)",
-           "MiniGrid-MemoryS13-v0", "memrl-s13-pbim3", SIX, ["pbim_e3b_idm"],
-           # Method has no hp field — S13's tuned HP rides in Density.cfg (merged
-           # last by _cfg, same values as the S13 EnvArm hp=). train.py forwards
-           # cfg gamma to the PBIM head, so head-γ==PPO-γ==0.999 automatically.
+    Method("PBIM3S13", "Normalized-PBIM relaunch (S13, fast-EMA b̄, all 3 densities)",
+           "MiniGrid-MemoryS13-v0", "memrl-s13-pbim3b", SIX, ["pbim_e3b_idm"],
+           # memrl-s13-pbim3 (ema_momentum=0.99 default) showed a RESIDUAL dawdle:
+           # ep_len 500–845 (none≈8–17), succ 0.06–0.29, V_int~O(10) NOT O(0.01).
+           # Cause: E3B bonus decays over training; a slow b̄ lags it → centered
+           # bonus stays negative → V_int accumulates over S13's 845·γ=0.999 horizon.
+           # Fix = faster b̄ (ema_momentum 0.99→0.95 via intrinsic_kwargs) so b̄
+           # tracks the decay and keeps centered≈0. MPG (memrl-mpg-pbim3) is fine at
+           # 0.99 and UNCHANGED. S13's tuned HP + the ema override ride in Density.cfg.
            [Density("sparseV3", env_kwargs={"agent_view_size": 3, "reward_mode": "flat"},
-                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4,
+                         "intrinsic_kwargs": {"ema_momentum": 0.95}}),
             Density("sparseV7", env_kwargs={"agent_view_size": 7, "reward_mode": "flat"},
-                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4,
+                         "intrinsic_kwargs": {"ema_momentum": 0.95}}),
             Density("freezeV3", env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
                                             "move_penalty": 1.0 / 845},
-                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4,
+                         "intrinsic_kwargs": {"ema_momentum": 0.95}})],
            [0, 1, 2, 3, 4], 20_000_000,
-           "S13-PBIM the fair way: normalized +（b−b̄) delivery — the ep_len 8→845 stall must be "
-           "GONE (watch eval/mean_ep_length ≈ none's, pbim_V_int_mean O(0.01), disc_sum ≈0) "
-           "before trusting arms. This is the honest 'does densified e3b help retention?' test."),
+           "S13-PBIM the fair way + fast-EMA fix: the ep_len 8→845 stall must be GONE "
+           "(watch eval/mean_ep_length ≈ none's, pbim_V_int_mean O(1) not O(10), disc_sum small). "
+           "If dawdle persists the within-episode novelty structure is inherent → S13-PBIM stays "
+           "MPG-only in the paper (no loss, keystone is MPG)."),
 ]
 METHOD = {m.eid: m for m in METHODS}
 

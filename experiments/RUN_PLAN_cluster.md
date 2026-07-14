@@ -191,5 +191,24 @@ across rollout boundaries. Only a LARGE or GROWING value signals instability; ~1
 
 **Paper effect.** This is the honest steelman: `+（b−b̄)` gives PBIM the SAME per-step guidance as
 raw e3b, de-biased — so "does densified e3b help?" is finally a fair test. ρ=0 keystone re-tested
-on a faithful, magnitude-controlled potential; S13-PBIM re-enters without the stall confound. The
-arm is now literally Forbes PBIM (drop the "-style" qualifier in the paper).
+on a faithful, magnitude-controlled potential.
+NAMING (post lit-review): it is a **learned-potential variant** of PBIM (learned V_int, not
+Forbes' analytic −U_t) — say so + cite Devlin&Kudenko 2012 / Grześ&Kudenko 2008; do NOT call it
+plain "Forbes PBIM".
+
+### PBIM3 s0-canary readout (2026-07-13) + the S13 fast-EMA follow-up
+- **MPG s0 = GOOD.** ρ=0 keystone holds (penalty none=0=pbim3=0.00, e3b rescues), PBIM≈none,
+  ep_len normal. The MPG result is ROBUST across original/pbim2/pbim3 (structural 0-vs-0-vs-rescue)
+  → safe to rely on; report the pbim3 numbers (method you describe). Fire the full MPG grid.
+- **S13 s0 = IMPROVED, NOT clean.** pbim3(ema 0.99): ep_len 500–845 (none≈8–17), succ 0.06–0.29
+  (none 0.5–0.9). Better than pbim2 (845/0.00) but residual dawdle. Cause: V_int came in O(10) not
+  O(0.01) — E3B bonus decays over training, slow b̄ lags it → centered bonus persistently negative.
+- **Fix wired:** `ema_momentum` now a PBIM param (default 0.99). **PBIM3S13 → memrl-s13-pbim3b with
+  ema_momentum=0.95** (via intrinsic_kwargs; MPG unchanged at 0.99). Launch the S13 canary, KILL the
+  old memrl-s13-pbim3 (0.99) jobs:
+  ```bash
+  EID=PBIM3S13 ONLY='s0_' k8s/launch-memtrain-jobs.sh    # → memrl-s13-pbim3b, 18 runs
+  ```
+  Gate: `pbim_V_int_mean` O(1) not O(10) AND `eval/mean_ep_length` ≈ none (~8–17). If ep_len still
+  elevated, the within-episode novelty structure is inherent → **S13-PBIM stays MPG-only in the
+  paper (no loss — the keystone is MPG).** Don't chain more tuning; one canary, then decide.

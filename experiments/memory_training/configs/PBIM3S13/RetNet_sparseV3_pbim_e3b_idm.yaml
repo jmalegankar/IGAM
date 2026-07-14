@@ -23,12 +23,14 @@ max_grad_norm: 0.5
 target_kl: 0.05
 chunk_len: 32
 n_chunks_per_batch: 32
+intrinsic_kwargs:
+  ema_momentum: 0.95
 intrinsic: pbim_e3b_idm
 lambda_intrinsic: 0.03
 eval_every_rollouts: 10
 n_eval_episodes: 20
 wandb: true
-wandb_project: memrl-s13-pbim3
+wandb_project: memrl-s13-pbim3b
 wandb_group: sparseV3
 wandb_job_type: pbim_e3b_idm
 wandb_tags:

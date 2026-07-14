@@ -119,6 +119,7 @@ class PBIM(IntrinsicRewardModule):
         lr: float = 1e-3,
         fit_epochs: int = 4,
         scale: float = 1.0,
+        ema_momentum: float = 0.99,
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__(n_envs=base.n_envs, device=device)
@@ -155,8 +156,14 @@ class PBIM(IntrinsicRewardModule):
         # (c) makes the fit target ~0-mean so V_int stays bounded even at γ→1 on
         # long horizons — centering removes the divergence at its source, the
         # terminal anchor is then just belt-and-suspenders.
+        # ema_momentum controls how fast b̄ tracks the bonus. E3B's raw bonus
+        # DECAYS over training (novelty falls as φ/ellipsoid learn); a too-slow b̄
+        # lags that decay, leaving a persistently-negative centered bonus whose
+        # return-to-go accumulates to |V_int|~O(10) on long horizons (S13,
+        # γ=0.999·T=845) and nudges a residual explore-and-dawdle. A faster b̄
+        # (lower momentum) tracks the decay and keeps the centered bonus ~0.
         self._bonus_ema: float = 0.0
-        self._ema_momentum: float = 0.99
+        self._ema_momentum: float = float(ema_momentum)
 
         # Transition buffer of φ-FEATURES (small) for fitting V_int.
         # Stores (phi_s, phi_s2, centered_b, cross_boundary) per env per step.
@@ -337,15 +344,16 @@ def make_pbim_e3b_idm(
     """Convenience builder: PBIM wrapping the canonical E3BIDM base.
 
     `kwargs` are forwarded to E3BIDM (lambda_reg, hidden_dim, lr, idm_epochs, …)
-    EXCEPT PBIM-specific keys (gamma, potential_hidden, lr_pbim, fit_epochs, scale)
-    which are popped here. Keep E3BIDM's config IDENTICAL to the raw-e3b arm so the
-    only difference between arms is potential-vs-raw delivery.
+    EXCEPT PBIM-specific keys (gamma, potential_hidden, lr_pbim, fit_epochs, scale,
+    ema_momentum) which are popped here. Keep E3BIDM's config IDENTICAL to the
+    raw-e3b arm so the only difference between arms is potential-vs-raw delivery.
     """
     pbim_keys = {
         "potential_hidden": kwargs.pop("potential_hidden", 128),
         "lr": kwargs.pop("lr_pbim", 1e-3),
         "fit_epochs": kwargs.pop("fit_epochs", 4),
         "scale": kwargs.pop("scale", 1.0),
+        "ema_momentum": kwargs.pop("ema_momentum", 0.99),
     }
     base = E3BIDM(n_envs=n_envs, obs_dim=obs_dim, n_actions=n_actions,
                   device=device, **kwargs)
