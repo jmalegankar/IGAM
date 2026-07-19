@@ -226,7 +226,7 @@ def _build_intrinsic_module(cfg: dict, env):
     """Instantiate the configured exploration module.
 
     YAML schema:
-        intrinsic: "none" | "rnd" | "e3b_rand" | "e3b_obs" | "e3b_innov" | "noveld" | "icm"
+        intrinsic: "none" | "rnd" | "e3b_rand" | "e3b_obs" | "e3b_innov" | "noveld" | "icm" | "ride"
         intrinsic_kwargs: {...}   # forwarded to the module ctor (lambda_reg, hidden_dim, etc.)
 
     Returns None if "none" or unspecified.
@@ -235,9 +235,9 @@ def _build_intrinsic_module(cfg: dict, env):
     if name in (None, "none", "None"):
         return None
     kwargs = dict(cfg.get("intrinsic_kwargs", {}))
-    # IDM-based E3B/PBIM use a multi-head inverse model; pass per-dim action sizes
-    # so MultiDiscrete action spaces train correctly.
-    if name in ("e3b_idm", "pbim_e3b_idm") and "action_dims" not in kwargs:
+    # IDM-based E3B/PBIM and RIDE use a multi-head inverse model; pass per-dim
+    # action sizes so MultiDiscrete action spaces train correctly.
+    if name in ("e3b_idm", "pbim_e3b_idm", "ride") and "action_dims" not in kwargs:
         kwargs["action_dims"] = _action_dims(env)
     if name == "pbim_e3b_idm" and "gamma" not in kwargs:
         kwargs["gamma"] = cfg.get("gamma", 0.99)   # PBIM telescoping must match PPO γ

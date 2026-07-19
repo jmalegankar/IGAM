@@ -13,6 +13,7 @@ Available modules:
     "e3b_innov"  — E3B with φ^eps_mem       — episodic, Agency-Principle counter
     "noveld"     — NovelD (Zhang 2021)      — hybrid (RND diff + first-visit gate)
     "icm"        — ICM (Pathak 2017)        — lifelong, IDF features
+    "ride"       — RIDE (Raileanu 2020)     — impact (Δφ) / sqrt(episodic count)
 
 For E3B + a different feature source, build via:
     >>> from memrl.exploration import E3B, RandomPhi
@@ -28,6 +29,7 @@ from .none import NoBonus
 from .noveld import NovelD
 from .phi_sources import CellInnovationPhi, IDMPhi, ObsPhi, PhiSource, RandomPhi
 from .pbim import PBIM, make_pbim_e3b_idm
+from .ride import RIDE
 from .rnd import RND
 
 
@@ -36,6 +38,7 @@ _REGISTRY = {
     "rnd":        RND,
     "noveld":     NovelD,
     "icm":        ICM,
+    "ride":       RIDE,
 }
 
 
@@ -54,19 +57,19 @@ def make_intrinsic(
     pick the source. For custom sources, instantiate `E3B(phi_source=...)` directly.
 
     Args:
-        name:       "none" / "rnd" / "e3b_rand" / "e3b_obs" / "e3b_innov" / "noveld" / "icm"
+        name:       "none" / "rnd" / "e3b_rand" / "e3b_obs" / "e3b_innov" / "noveld" / "icm" / "ride"
         n_envs:     parallel envs
         obs_dim:    flattened observation dimension
-        n_actions:  needed for ICM (Discrete action vocab)
+        n_actions:  needed for ICM and RIDE (Discrete action vocab)
         device:     torch device
         **kwargs:   forwarded to the module constructor
     """
     name = name.lower()
     if name in _REGISTRY:
         cls = _REGISTRY[name]
-        if name == "icm":
+        if name in ("icm", "ride"):
             if n_actions is None:
-                raise ValueError("ICM requires n_actions=<Discrete vocab>")
+                raise ValueError(f"{name} requires n_actions=<Discrete vocab>")
             return cls(n_envs=n_envs, obs_dim=obs_dim, n_actions=n_actions,
                        device=device, **kwargs)
         if name == "none":
@@ -116,6 +119,7 @@ __all__ = [
     "PBIM", "make_pbim_e3b_idm",
     "NovelD",
     "ICM",
+    "RIDE",
     "PhiSource", "RandomPhi", "IDMPhi", "ObsPhi", "CellInnovationPhi",
     "EllipticalEpisodicBonus", "RunningStd",
 ]
