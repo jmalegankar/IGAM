@@ -113,11 +113,17 @@ def _mpg(label, **rk):
 # ── E1 CORE GRID: one design, replicated across the env suite ────────────────
 CORE = [
     EnvArm("MysteryPath", "MysteryPath-Grid-v0", "memrl-memtrain-mpg", SIX,
-           ["none", "e3b_idm", "pbim_e3b_idm", "noveld"],
+           # RIDE replaces PBIM as the 3rd non-potential episodic bonus (2026-07-19,
+           # advisor call): impact-family (Δφ / √N_ep) alongside E3B (coverage) and
+           # NovelD (prediction-error). RIDE uses λ=0.005 (see _cfg) not 0.03 — its
+           # dense every-step impact bonus swamps the sparse task at 0.03 (validated
+           # on S13: λ0.005 → succ 1.0, λ0.03 → dawdle/0). PBIM data retained in
+           # appendix; RIDE is the headline 3rd family.
+           ["none", "e3b_idm", "ride", "noveld"],
            [_mpg("sparse"), _mpg("penalty", reward_fall_off=-0.008),
             _mpg("aligned", reward_path_progress=0.1)],
            20_000_000,
-           "α>0 probing · F1 decodability · F2 freeze/rescue · F3 PBIM · "
+           "α>0 probing · F1 decodability · F2 freeze/rescue · F3 RIDE (3rd family) · "
            "entanglement · P5 · 20M HEADLINE (sparse none-vs-e3b slice)"),
     EnvArm("MortarMayhem", "MortarMayhem-Grid-v0", "memrl-memtrain-mm", FOUR,
            ["none", "e3b_idm", "pbim_e3b_idm"],
@@ -134,7 +140,9 @@ CORE = [
            20_000_000,
            "α≈0 reproduce · EXACT δ-toggle · KNOWN minimal RM → exact probe ground truth"),
     EnvArm("S13", "MiniGrid-MemoryS13-v0", "memrl-s13-matched", SIX,
-           ["none", "e3b_idm", "noveld", "pbim_e3b_idm"],
+           # RIDE replaces PBIM (advisor call 2026-07-19); λ=0.005 via _cfg. Validated
+           # locally: GDN RIDE λ0.005 → succ 1.0 (equalizes, matches e3b/noveld refs).
+           ["none", "e3b_idm", "noveld", "ride"],
            # EXP-7 / EXP-1. Reward- AND metric-matched to MysteryPath via MemoryRewardWrapper
            # (minigrid_wrappers.py). MiniGrid's NATIVE S13 reward is horizon-DISCOUNTED
            # (1 - 0.9 t/T, T_max = 5*13^2 = 845) — not sparse — which confounds the
@@ -268,6 +276,19 @@ METHODS = [
            [0, 1, 2, 3, 4], 10_000_000,
            "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
            "inert, not a floor artifact. Pairs with E15."),
+    Method("DISTRACT", "Distractor-reward ablation — structural vs reward sparsity (MysteryPath)",
+           "MysteryPath-Grid-v0", "memrl-mpg-distractor", SIX, ["none", "e3b_idm", "noveld"],
+           # Reviewer-2 control (DistractorRewardWrapper): +ε for revisiting an already-seen
+           # tile this episode (dense, USELESS), ε=eps_frac/T_max so per-episode total ≤ 0.1 ≪
+           # the unit goal reward → optimum UNCHANGED (still solve), only reward-sparsity removed
+           # + a farmable local optimum planted; fall=0. DENSITY-MATCHED to `aligned` (which pays
+           # +0.1 for NEW frontier tiles = useful), opposite usefulness. Prediction: amplification
+           # PERSISTS here (Δstrong−Δweak under e3b ≈ sparse's) while it VANISHES on aligned ⇒
+           # structural sparsity ≠ reward sparsity. No RIDE arm (RIDE fall-farms on MPG regardless).
+           [Density("distractor", env_kwargs={"distractor": {"eps_frac": 0.1}})],
+           [0, 1, 2, 3, 4], 20_000_000,
+           "Kills 'your effect is just reward sparsity' — dense-but-useless reward, same density "
+           "as aligned, opposite usefulness; bonus still amplifies ⇒ it's the acquisition structure."),
     # ── NORMALIZED-PBIM RELAUNCH — pbim3 (2026-07-13) ─────────────────────────
     # Two prior PBIM attempts, both superseded:
     #   • original (memrl-memtrain-mpg / memrl-s13-matched): no terminal anchor →
@@ -338,7 +359,10 @@ def _cfg(env_name, project, cell, dens, intrinsic, budget, eid, env_tag, hp_extr
     cfg.update(dens.cfg)               # density-specific (e.g. λ-sweep) wins last
     cfg["intrinsic"] = intrinsic
     if intrinsic != "none":
-        cfg["lambda_intrinsic"] = HP["lambda_intrinsic"]
+        # RIDE's dense, non-decaying impact bonus swamps the sparse task at the
+        # shared 0.03 (dawdle/0 success); 0.005 is the validated value (S13 GDN
+        # λ0.005 → 1.0). E3B/NovelD keep the shared HP λ.
+        cfg["lambda_intrinsic"] = 0.005 if intrinsic == "ride" else HP["lambda_intrinsic"]
     cfg.update({"eval_every_rollouts": HP["eval_every_rollouts"],
                 "n_eval_episodes": HP["n_eval_episodes"], "wandb": True,
                 "wandb_project": project, "wandb_group": dens.label,

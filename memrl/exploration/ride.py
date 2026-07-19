@@ -24,14 +24,21 @@ Key differences from the codebase's `ICM`:
     score the reward — so RIDE's bonus does not vanish as the forward model
     gets accurate (a central selling point of the paper, §4/§6.1).
   * The forward target IS detached (canonical ICM, Pathak 2017:
-    `||f_fw(φ_t,a_t) − φ(s_{t+1}).detach()||²`). The paper writes
-    L_fw(θ_fw, θ_emb) loosely, but training θ_emb through BOTH sides of a
-    forward-dominant loss makes φ≈const the global optimum (f_fw learns the
-    constant, L_fw→0), collapsing the impact bonus ‖φ(s')−φ(s)‖ to 0. We
-    verified this empirically (fwd_loss→0, inverse accuracy stuck at chance,
-    bonus→0). Detaching the target + an inverse-dominant weighting
-    (forward_coef 0.2, inverse_coef 0.8, ICM's β=0.2) keeps φ action-informative
-    and the bonus alive.
+    `||f_fw(φ_t,a_t) − φ(s_{t+1}).detach()||²`). This is the single fix that
+    prevents representation collapse; the RIDE loss coefficients are the
+    published ones (forward 10, inverse 0.1). Training θ_emb through BOTH sides
+    of the forward loss (target NOT detached) makes φ≈const the global optimum
+    (f_fw learns the constant, L_fw→0), collapsing the impact bonus ‖φ(s')−φ(s)‖
+    to 0 — verified empirically (fwd_loss→0, inverse acc stuck at chance 0.25,
+    bonus 0.7→0.01). With the detach, the published 10/0.1 coefficients train
+    fine on the synthetic chain and the real S13/MPG envs (inv_acc→1, bonus
+    stable). The official RIDE (facebookresearch/impact-driven-exploration:
+    forward_loss_coef=10.0, inverse_loss_coef=0.1, NO detach) avoids collapse via
+    a CONVOLUTIONAL embedding; we use a flat-MLP embedding to match the φ of
+    E3B/NovelD (bonuses differ by mechanism, not architecture), so the un-detached
+    loss collapses. Hence the ONLY deviation from published RIDE is this
+    ICM-standard forward-target detach; coefficients and the impact-reward
+    definition ‖φ(s')−φ(s)‖/√N_ep are unchanged.
 
 Like the paper, θ_emb / θ_fwd / θ_inv are trained ONLY by L_fwd + L_inv, never
 by the RL loss (this module is entirely separate from the policy network).
@@ -108,8 +115,9 @@ class RIDE(IntrinsicRewardModule):
         feature_dim: int = 64,
         hidden_dim: int = 128,
         lr: float = 1e-3,
-        forward_coef: float = 0.2,   # ICM β=0.2; inverse-dominant prevents φ collapse
-        inverse_coef: float = 0.8,
+        forward_coef: float = 10.0,  # canonical RIDE (Raileanu 2020); collapse is
+        inverse_coef: float = 0.1,   # prevented by DETACHING the forward target, not
+                                     # by reweighting — see the fwd-loss note below.
         idm_epochs: int = 1,
         idm_batch: int = 512,
         normalize: bool = True,
@@ -147,6 +155,11 @@ class RIDE(IntrinsicRewardModule):
         self.rms = RunningStd() if normalize else None
 
         self.counts = _EpisodicCount(n_envs)
+        # N_ep diagnostics — to MEASURE (not assume) whether the episodic count
+        # actually increments on this env. If ride_n_ep_max stays ~1 the obs-hash
+        # never repeats (count inert); if it grows, the count works but only
+        # ATTENUATES (÷√N) the reset reward rather than eliminating it.
+        self._nep_sum = 0.0; self._nep_cnt = 0; self._nep_max = 0.0; self._nep_gt1 = 0
         # Opt into env infos so we can read a discrete pose key (info["novelty_key"])
         # for the episodic count on continuous-state envs; else we hash raw obs.
         self.wants_infos = True
@@ -187,6 +200,9 @@ class RIDE(IntrinsicRewardModule):
             flat = np.asarray(obs).reshape(n, -1)
             keys = [flat[i].tobytes() for i in range(n)]
         n_ep = self.counts.visit_then_count(keys)          # (n_envs,) ≥ 1
+        self._nep_sum += float(n_ep.sum()); self._nep_cnt += int(n_ep.size)
+        self._nep_max = max(self._nep_max, float(n_ep.max()))
+        self._nep_gt1 += int((n_ep > 1).sum())
         bonus = bonus / np.sqrt(n_ep)
 
         # Running-std normalization (codebase convention; keeps λ_intrinsic
@@ -269,4 +285,10 @@ class RIDE(IntrinsicRewardModule):
                "ride_n":        float(N)}
         if self.rms is not None:
             out["ride_running_std"] = float(self.rms.std)
+        # N_ep stats over the rollout: does the episodic count actually increment?
+        if self._nep_cnt:
+            out["ride_n_ep_mean"] = self._nep_sum / self._nep_cnt
+            out["ride_n_ep_max"] = self._nep_max
+            out["ride_frac_revisit"] = self._nep_gt1 / self._nep_cnt
+        self._nep_sum = 0.0; self._nep_cnt = 0; self._nep_max = 0.0; self._nep_gt1 = 0
         return out

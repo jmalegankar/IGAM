@@ -143,6 +143,65 @@ class OraclePotentialWrapper(gym.Wrapper):
         return obs, float(reward + F), terminated, truncated, info
 
 
+class DistractorRewardWrapper(gym.Wrapper):
+    """Dense DISTRACTOR reward — the Reviewer-2 control: reward DENSITY without
+    USEFULNESS. Pays ``ε`` for every step that lands on an ALREADY-VISITED tile
+    this episode (farmable by oscillating on the known prefix; discovers nothing).
+
+    Calibration (the load-bearing constraint): ``ε = eps_frac / T_max`` so farming
+    the whole episode (≤ T_max revisits) totals ≤ ``eps_frac`` (=0.1) ≪ the unit
+    goal reward. The OPTIMAL policy is therefore UNCHANGED — reaching the goal
+    (return 1) still dominates farming (return ≤ 0.1) — so this does not "change
+    the task"; it only removes reward sparsity and plants a farmable LOCAL optimum
+    (a trap). ``ε ≥ 1/T_max`` would flip the optimum to "sit still" and change the
+    task, which is exactly what we must not do.
+
+    Falls pay 0: a fall increments the env's ``num_fails`` and resets the agent to
+    a visited tile, so without this guard a fall would be rewarded as a revisit —
+    the opposite of intent. We zero the reward on any step where ``num_fails``
+    increased.
+
+    Mirror of the ``aligned`` arm: aligned pays ``+0.1`` for advancing to a NEW
+    frontier tile (useful → makes the bonus redundant); this pays ``ε`` for
+    returning to an OLD tile (useless → bonus still needed). Same density axis,
+    opposite usefulness — the controlled pair that separates structural sparsity
+    from ordinary reward sparsity.
+    """
+
+    def __init__(self, env: gym.Env, eps_frac: float = 0.1) -> None:
+        super().__init__(env)
+        self._T = int(getattr(env.unwrapped, "max_episode_steps", 128))
+        self._eps = float(eps_frac) / self._T   # per-revisit; per-episode total ≤ eps_frac
+        self._visited: set = set()
+        self._prev_fails = 0
+
+    def _tile(self) -> tuple:
+        ax, ay = self.env.unwrapped.normalized_agent_position   # integer grid cells
+        return (int(ax), int(ay))
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        self._visited = {self._tile()}
+        self._prev_fails = int(getattr(self.env.unwrapped, "num_fails", 0))
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        nf = int(getattr(self.env.unwrapped, "num_fails", self._prev_fails))
+        fell = nf > self._prev_fails
+        self._prev_fails = nf
+        d = 0.0
+        if not fell and not (terminated or truncated):
+            t = self._tile()
+            if t in self._visited:
+                d = self._eps            # revisit an OLD tile → distractor pays
+            else:
+                self._visited.add(t)      # NEW frontier tile → no distractor
+        info = dict(info)
+        info["distractor_r"] = float(d)
+        return obs, float(reward + d), terminated, truncated, info
+
+
 class StickyResetOptions(gym.Wrapper):
     """Replay a fixed ``options`` dict on every ``reset(...)``.
 
@@ -165,6 +224,7 @@ def make_memory_gym_vec_env(
     seed: int = 0,
     reset_options: Optional[dict[str, Any]] = None,
     oracle_potential: Optional[dict[str, Any]] = None,
+    distractor: Optional[dict[str, Any]] = None,
 ) -> VecEnv:
     """Build a vectorized memory-gym env.
 
@@ -191,6 +251,8 @@ def make_memory_gym_vec_env(
                 env = StickyResetOptions(env, reset_options)
             if oracle_potential is not None and "MysteryPath" in env_name:
                 env = OraclePotentialWrapper(env, **oracle_potential)
+            if distractor is not None and "MysteryPath" in env_name:
+                env = DistractorRewardWrapper(env, **distractor)
             env = SuccessInfoAlias(env)
             env = NormalizeImageObs(env)
             env.reset(seed=seed + rank)
