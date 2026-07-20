@@ -289,6 +289,27 @@ METHODS = [
            [0, 1, 2, 3, 4], 20_000_000,
            "Kills 'your effect is just reward sparsity' — dense-but-useless reward, same density "
            "as aligned, opposite usefulness; bonus still amplifies ⇒ it's the acquisition structure."),
+    Method("DISTRACTS13", "Distractor-reward ablation — structural vs reward sparsity (S13 retention)",
+           "MiniGrid-MemoryS13-v0", "memrl-s13-distractor", SIX, ["none", "e3b_idm", "noveld"],
+           # Symmetric Reviewer-2 control for the EQUALIZE arm. MiniGrid DistractorRewardWrapper:
+           # +ε for stepping onto an already-visited grid cell (dense, USELESS), ε=eps_frac/max_steps
+           # (S13 max_steps=845) so per-episode total ≤ 0.1 ≪ the +1 correct-object reward → optimum
+           # UNCHANGED (still solve), reward-sparsity removed + a farmable trap planted. No falls in
+           # MiniGrid → no fall guard. Runs the flat-sparse 3×3 view (where the bonus equalizes,
+           # none .49–.79 → e3b/nvld .89–.98); 7×7 is omitted — its baselines already saturate so
+           # there is no gap to move. S13 has no `aligned` twin, so this is the control against
+           # sparseV3: if the bonus STILL equalizes under a dense reward, the equalization is not a
+           # reward-frequency / cue-exposure artifact (kills the reviewer's "weak cells just need to
+           # encounter the cue" story). Density-matched to the MPG distractor for a symmetric ablation
+           # across both signs of the reversal. S13's tuned HP rides in Density.cfg (Methods have no hp
+           # field; emit_method passes no hp_extra → cfg.update(dens.cfg) applies it last). No RIDE arm.
+           [Density("distractor",
+                    env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
+                                "distractor": {"eps_frac": 0.1}},
+                    cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
+           [0, 1, 2, 3, 4], 20_000_000,
+           "Symmetric to DISTRACT: dense-but-useless reward on the EQUALIZE env; bonus still "
+           "equalizes ⇒ retention equalization is structural, not reward-frequency. 3×3 only."),
     # ── NORMALIZED-PBIM RELAUNCH — pbim3 (2026-07-13) ─────────────────────────
     # Two prior PBIM attempts, both superseded:
     #   • original (memrl-memtrain-mpg / memrl-s13-matched): no terminal anchor →

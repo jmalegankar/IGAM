@@ -129,6 +129,62 @@ class MemoryRewardWrapper(gym.Wrapper):
         return obs, float(reward), terminated, truncated, info
 
 
+class DistractorRewardWrapper(gym.Wrapper):
+    """Dense-but-useless reward for MiniGrid Memory envs (Reviewer-2 control).
+
+    Pays ``ε`` every step the agent steps onto a grid cell it has ALREADY visited
+    this episode (a revisit); a step onto a NEW cell pays nothing. The reward is
+    *dense* (fires most steps once the agent has moved around) yet *useless* — it
+    rewards occupancy of old tiles, never the cue-retention transition the task is
+    about, and it does not help find the target object.
+
+    Calibration (the load-bearing constraint): ``ε = eps_frac / T_max`` with
+    ``T_max = env.max_steps`` (S13: 5·13² = 845), so farming the whole episode
+    (≤ T_max revisits) totals ≤ ``eps_frac`` (=0.1) ≪ the unit ``+1`` goal reward.
+    The OPTIMAL policy is UNCHANGED — reaching the matching object (return 1) still
+    strictly dominates farming (return ≤ 0.1), and the +1 terminates the episode so
+    farming cannot be stacked on top unboundedly. It only removes reward sparsity
+    and plants a farmable LOCAL optimum. No DP solver is needed: the per-episode
+    bound ≤ eps_frac holds by construction for ANY tile count and geometry.
+
+    S13 vs MysteryPath, one difference worth noting: MysteryPath's distractor is
+    density-matched to an ``aligned`` twin (which pays +0.1 for NEW frontier tiles).
+    S13 has no ``aligned`` arm (no incremental progress to pay for), so this arm is
+    the control against ``sparseV3``: if the bonus STILL equalizes here under a dense
+    reward, the equalization is not a reward-frequency / cue-exposure artifact. There
+    are no falls in MiniGrid Memory, so (unlike the MysteryPath wrapper) no fall guard
+    is needed — every non-terminal step is eligible.
+    """
+
+    def __init__(self, env: gym.Env, eps_frac: float = 0.1) -> None:
+        super().__init__(env)
+        self._T = int(getattr(env.unwrapped, "max_steps", 845))
+        self._eps = float(eps_frac) / self._T   # per-revisit; per-episode total ≤ eps_frac
+        self._visited: set = set()
+
+    def _tile(self) -> tuple:
+        ax, ay = self.env.unwrapped.agent_pos      # integer grid cells (x, y)
+        return (int(ax), int(ay))
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        self._visited = {self._tile()}
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        d = 0.0
+        if not (terminated or truncated):
+            t = self._tile()
+            if t in self._visited:
+                d = self._eps            # revisit an OLD tile → distractor pays
+            else:
+                self._visited.add(t)      # NEW tile → no distractor
+        info = dict(info)
+        info["distractor_r"] = float(d)
+        return obs, float(reward + d), terminated, truncated, info
+
+
 def make_minigrid_vec_env(
     env_name: str,
     n_envs: int = 8,
@@ -137,6 +193,7 @@ def make_minigrid_vec_env(
     agent_view_size: Optional[int] = None,
     reward_mode: str = "native",
     move_penalty: float = 0.0,
+    distractor: Optional[dict] = None,
 ) -> VecEnv:
     """Build a vectorized MiniGrid environment for memory tasks.
 
@@ -169,11 +226,17 @@ def make_minigrid_vec_env(
     # is skipped. Applied innermost so it sees the raw Discrete(7) action and the unwrapped env.
     is_memory = "Memory" in env_name
 
+    # Distractor arm applies only to the Memory-* envs (needs the flat reward + agent_pos).
+    use_distractor = is_memory and distractor is not None
+    info_keywords = ("is_success", "distractor_r") if use_distractor else ("is_success",)
+
     def _make_one(rank: int):
         def _init():
             env = gym.make(env_name)
             if is_memory:
                 env = MemoryRewardWrapper(env, mode=reward_mode, move_penalty=move_penalty)
+            if use_distractor:
+                env = DistractorRewardWrapper(env, **distractor)
             if use_wrapper:
                 env = MemoryStartWrapper(env)
             if agent_view_size is not None:
@@ -183,7 +246,7 @@ def make_minigrid_vec_env(
             env = CastImageFloat32(env)
             env.reset(seed=seed + rank)
             env.action_space.seed(seed + rank)
-            return Monitor(env, info_keywords=("is_success",)) if is_memory else Monitor(env)
+            return Monitor(env, info_keywords=info_keywords) if is_memory else Monitor(env)
         return _init
 
     return DummyVecEnv([_make_one(i) for i in range(n_envs)])
