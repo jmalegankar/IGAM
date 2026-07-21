@@ -171,7 +171,14 @@ CORE = [
     EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny",
            SIX + ["GTrXL", "LinearTransformer"],   # +full-attn + linear-attn: does
            # attention beat the SSM exact-recall floor? (Jelassi "Repeat After Me")
-           ["none", "e3b_idm"],
+           # NovelD added (2026-07-20) so the NULL third sign replicates across BOTH
+           # bonuses, matching the amplify (MPG) and equalize (S13) arms — Table 3's
+           # nvld column was open, leaving the null resting on E3B alone. NovelD needs
+           # no action_dims (RND-based, not IDM), and Tiny's Box obs is binary one-hot
+           # so the episodic first-visit hash gate is exact. Expect a null by
+           # construction: the token sequence is dictated on a fixed schedule, and the
+           # handful of distinct observations saturates the gate within a few steps.
+           ["none", "e3b_idm", "noveld"],
            [Density("sparse", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"}),
             Density("dense", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
            10_000_000,
@@ -262,11 +269,18 @@ METHODS = [
            "PBIM-section survival kit (A5): task-informed extrinsic potential vs the freeze; "
            "n=3 → backfill to 5 if contested. Compare vs penalty-none freeze in memrl-memtrain-mpg."),
     Method("E5", "GatedDeltaNet best-HP α≈0 closure (Tiny)",
-           "TinyReproduce-v0", "memrl-tiny-exp5", ["GatedDeltaNet"], ["none", "e3b_idm"],
+           "TinyReproduce-v0", "memrl-tiny-exp5", ["GatedDeltaNet"], ["none", "e3b_idm", "noveld"],
            # GDN at its per-cell-best HP (lr 1e-3, assoc 64 — the E15 sweet spot where it
            # reaches ~0.35-0.40, so the cell has HEADROOM). Does E3B still do nothing there?
            # Closes the floor-confound on the α≈0 control (E15 was intrinsic=none only, so
            # "E3B≈none" was only shown while GDN was floored).
+           # NovelD added here too (2026-07-20), NOT just on the CORE Tiny arm: the CORE arm
+           # runs the shared HP (lr 1e-4, assoc 64), which E15 measures at success 0.000 for
+           # GDN — a GDN-noveld run there is floored and cannot separate "NovelD is inert"
+           # from "the cell cannot learn at all". Only this best-HP arm gives GDN the headroom
+           # that makes a NovelD null informative. NOTE the E15 pick is a TIE: lr1e3_a64 and
+           # lr3e4_a256 both score 0.350 at n=2, so "best" is arbitrary between them — harmless
+           # here because the claim needs headroom (0.35 vs the 0.00 floor), not optimality.
            [Density("besthp_sparse",
                     env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"},
                     cfg={"lr": 1e-3, "cell": {"name": "GatedDeltaNet", "kwargs": {"assoc_size": 64}}}),
@@ -293,8 +307,13 @@ METHODS = [
            "MiniGrid-MemoryS13-v0", "memrl-s13-distractor", SIX, ["none", "e3b_idm", "noveld"],
            # Symmetric Reviewer-2 control for the EQUALIZE arm. MiniGrid DistractorRewardWrapper:
            # +ε for stepping onto an already-visited grid cell (dense, USELESS), ε=eps_frac/max_steps
-           # (S13 max_steps=845) so per-episode total ≤ 0.1 ≪ the +1 correct-object reward → optimum
-           # UNCHANGED (still solve), reward-sparsity removed + a farmable trap planted. No falls in
+           # (S13 max_steps=845). Calibration is the DISCOUNTED criterion, not the undiscounted total:
+           # the optimum (rush to goal) is unchanged iff delaying the +1 goal one step to farm one more
+           # revisit never pays, i.e. ε/(1-γ) < 1. At S13's γ=0.999 the same ε has 5× the discounted
+           # value it has on MPG (γ=0.995), so eps_frac=0.1 would give only an 8× margin (ε/(1-γ)=0.118);
+           # eps_frac=0.02 restores ε/(1-γ)=0.02 (50× margin, matching MPG's 0.024). Density is set by the
+           # revisit trigger, not the magnitude, so the reward still fires every revisit step — only the
+           # trap is made unprofitable. reward-sparsity removed + a farmable (but unprofitable) trap. No falls in
            # MiniGrid → no fall guard. Runs the flat-sparse 3×3 view (where the bonus equalizes,
            # none .49–.79 → e3b/nvld .89–.98); 7×7 is omitted — its baselines already saturate so
            # there is no gap to move. S13 has no `aligned` twin, so this is the control against
@@ -305,7 +324,7 @@ METHODS = [
            # field; emit_method passes no hp_extra → cfg.update(dens.cfg) applies it last). No RIDE arm.
            [Density("distractor",
                     env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
-                                "distractor": {"eps_frac": 0.1}},
+                                "distractor": {"eps_frac": 0.02}},   # γ=0.999 → ε/(1-γ)=0.02 (50× margin)
                     cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
            [0, 1, 2, 3, 4], 20_000_000,
            "Symmetric to DISTRACT: dense-but-useless reward on the EQUALIZE env; bonus still "
