@@ -1,0 +1,22 @@
+##### memrl-mpg-distractor   [distractor]   (tail-mean of last-5 evals [n seeds])
+#     PRELIMINARY — runs in progress, median 20.0M / 20M steps
+#     pulled 86 runs
+
+    cell                    none         e3b      noveld     Δe3b    Δnvld
+    GRU                  0.02[5]     0.16[5]     0.17[5]     0.13     0.15
+    LSTM                 0.05[5]     0.17[5]     0.21[5]     0.12     0.15
+    RetNet               0.07[5]     0.55[5]     0.52[5]     0.48     0.46
+    GatedDeltaNet        0.01[5]     0.63[5]     0.53[4]     0.62     0.52
+    Mamba2               0.00[5]     0.31[5]     0.30[5]     0.31     0.30
+    Memoryless           0.01[4]     0.00[4]     0.04[4]    -0.01     0.03
+
+    strong(RetNet,GDN)  Δe3b=+0.55  Δnvld=+0.49
+    weak(GRU,LSTM)      Δe3b=+0.13  Δnvld=+0.15
+    Δstrong−Δweak       e3b=+0.43   noveld=+0.34
+    (positive => amplification PERSISTS under dense-but-useless reward; cf. aligned delta<=0)
+
+#   incomplete/crashed cells (n<5 or non-running state):
+#     GatedDeltaNet   noveld   n=4  {'running': 2, 'finished': 2}
+#     Memoryless      none     n=4  {'finished': 4}
+#     Memoryless      e3b_idm  n=4  {'finished': 4}
+#     Memoryless      noveld   n=4  {'finished': 4}
