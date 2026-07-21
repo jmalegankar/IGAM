@@ -325,11 +325,12 @@ METHODS = [
            # +ε for stepping onto an already-visited grid cell (dense, USELESS), ε=eps_frac/max_steps
            # (S13 max_steps=845). Calibration is the DISCOUNTED criterion, not the undiscounted total:
            # the optimum (rush to goal) is unchanged iff delaying the +1 goal one step to farm one more
-           # revisit never pays, i.e. ε/(1-γ) < 1. At S13's γ=0.999 the same ε has 5× the discounted
-           # value it has on MPG (γ=0.995), so eps_frac=0.1 would give only an 8× margin (ε/(1-γ)=0.118);
-           # eps_frac=0.02 restores ε/(1-γ)=0.02 (50× margin, matching MPG's 0.024). Density is set by the
-           # revisit trigger, not the magnitude, so the reward still fires every revisit step — only the
-           # trap is made unprofitable. reward-sparsity removed + a farmable (but unprofitable) trap. No falls in
+           # revisit never pays, i.e. ε/(1-γ) < 1. eps_frac=0.1 gives ε/(1-γ)=0.118 here — satisfied, but
+           # only an 8× margin, because S13's γ=0.999 carries 5× the discounted value the same ε has on
+           # MPG (γ=0.995, 42×). KEPT AT 0.1 (not tightened to 0.02) because the reported runs used 0.1
+           # — all 86 in memrl-s13-distractor — and the config must reproduce the published table. The
+           # 8× margin held empirically: `none` lands at .42-.73, comparable to sparse's .49-.84, with no
+           # farming collapse. reward-sparsity removed + a farmable (but unprofitable) trap. No falls in
            # MiniGrid → no fall guard. Runs the flat-sparse 3×3 view (where the bonus equalizes,
            # none .49–.79 → e3b/nvld .89–.98); 7×7 is omitted — its baselines already saturate so
            # there is no gap to move. S13 has no `aligned` twin, so this is the control against
@@ -340,7 +341,7 @@ METHODS = [
            # field; emit_method passes no hp_extra → cfg.update(dens.cfg) applies it last). No RIDE arm.
            [Density("distractor",
                     env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
-                                "distractor": {"eps_frac": 0.02}},   # γ=0.999 → ε/(1-γ)=0.02 (50× margin)
+                                "distractor": {"eps_frac": 0.1}},   # matches the reported runs; ε/(1-γ)=0.118 (8× margin)
                     cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
            [0, 1, 2, 3, 4], 20_000_000,
            "Symmetric to DISTRACT: dense-but-useless reward on the EQUALIZE env; bonus still "

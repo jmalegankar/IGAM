@@ -3,7 +3,7 @@ env_kwargs:
   agent_view_size: 3
   reward_mode: flat
   distractor:
-    eps_frac: 0.02
+    eps_frac: 0.1
 n_envs: 16
 total_timesteps: 20000000
 seed: 0
