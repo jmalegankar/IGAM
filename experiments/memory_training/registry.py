@@ -171,14 +171,11 @@ CORE = [
     EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny",
            SIX + ["GTrXL", "LinearTransformer"],   # +full-attn + linear-attn: does
            # attention beat the SSM exact-recall floor? (Jelassi "Repeat After Me")
-           # NovelD added (2026-07-20) so the NULL third sign replicates across BOTH
-           # bonuses, matching the amplify (MPG) and equalize (S13) arms — Table 3's
-           # nvld column was open, leaving the null resting on E3B alone. NovelD needs
-           # no action_dims (RND-based, not IDM), and Tiny's Box obs is binary one-hot
-           # so the episodic first-visit hash gate is exact. Expect a null by
-           # construction: the token sequence is dictated on a fixed schedule, and the
-           # handful of distinct observations saturates the gate within a few steps.
-           ["none", "e3b_idm", "noveld"],
+           # NovelD is NOT on this arm: it is scoped to the 3 reported cells via the
+           # TINYNVLD Method (GRU/LSTM at this shared HP) + E5 (GDN at lr 1e-3, since
+           # the shared lr 1e-4 floors GDN to ~0.00). Running noveld across all 8 cells
+           # here would be 80 runs for 5 cells the table never reports.
+           ["none", "e3b_idm"],
            [Density("sparse", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"}),
             Density("dense", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
            10_000_000,
@@ -290,6 +287,25 @@ METHODS = [
            [0, 1, 2, 3, 4], 10_000_000,
            "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
            "inert, not a floor artifact. Pairs with E15."),
+    Method("TINYNVLD", "NovelD on TinyReproduce — the NULL sign at a 2nd bonus (GRU/LSTM)",
+           "TinyReproduce-v0", "memrl-memtrain-tiny", ["GRU", "LSTM"], ["noveld"],
+           # Fills Table 3's open nvld column so the NULL third sign replicates across BOTH
+           # bonuses, matching amplify (MPG) and equalize (S13) — it had rested on E3B alone.
+           # Scoped to the cells the table reports AND that have headroom at the shared HP
+           # (GRU .64, LSTM .88 with intrinsic=none): a null is only informative off the floor.
+           # GDN is NOT here — the shared lr 1e-4 floors it to ~0.00 (E15), so its noveld row
+           # comes from E5 at lr 1e-3. Memoryless is omitted: it is at .00 by construction (no
+           # state to write into) and E3B already establishes that control.
+           # Same project as the CORE arm so the nvld column sits beside none/e3b; the shared
+           # HP is inherited (no Density.cfg override) so it is directly comparable to them.
+           # Expect a null by construction: the token sequence is dictated on a fixed schedule,
+           # and Tiny's handful of distinct observations saturates NovelD's episodic
+           # first-visit gate within a few steps. NovelD needs no action_dims (RND, not IDM).
+           [Density("sparse", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"}),
+            Density("dense",  env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
+           [0, 1, 2, 3, 4], 10_000_000,
+           "Table 3 nvld column (shared-protocol cells). With E5's GDN-noveld this makes the "
+           "null replicate across E3B and NovelD, as amplify/equalize already do."),
     Method("DISTRACT", "Distractor-reward ablation — structural vs reward sparsity (MysteryPath)",
            "MysteryPath-Grid-v0", "memrl-mpg-distractor", SIX, ["none", "e3b_idm", "noveld"],
            # Reviewer-2 control (DistractorRewardWrapper): +ε for revisiting an already-seen
