@@ -287,15 +287,21 @@ METHODS = [
            [0, 1, 2, 3, 4], 10_000_000,
            "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
            "inert, not a floor artifact. Pairs with E15."),
-    Method("TINYNVLD", "NovelD on TinyReproduce — the NULL sign at a 2nd bonus (GRU/LSTM)",
-           "TinyReproduce-v0", "memrl-memtrain-tiny", ["GRU", "LSTM"], ["noveld"],
+    Method("TINYNVLD", "NovelD on TinyReproduce — the NULL sign at a 2nd bonus (all six cells)",
+           "TinyReproduce-v0", "memrl-memtrain-tiny", SIX, ["noveld"],
            # Fills Table 3's open nvld column so the NULL third sign replicates across BOTH
            # bonuses, matching amplify (MPG) and equalize (S13) — it had rested on E3B alone.
-           # Scoped to the cells the table reports AND that have headroom at the shared HP
-           # (GRU .64, LSTM .88 with intrinsic=none): a null is only informative off the floor.
-           # GDN is NOT here — the shared lr 1e-4 floors it to ~0.00 (E15), so its noveld row
-           # comes from E5 at lr 1e-3. Memoryless is omitted: it is at .00 by construction (no
-           # state to write into) and E3B already establishes that control.
+           # Extended from GRU/LSTM to all SIX cells (2026-07-22). The informative cells remain
+           # GRU/LSTM (headroom at the shared HP: .63/.82 with intrinsic=none); RetNet, Mamba-2,
+           # Memoryless and GDN are floored (~.00-.07) so their nulls are uninformative on their
+           # own — but running them removes the appearance of choosing which cells got the third
+           # bonus, and Tiny is cheap. GDN's INFORMATIVE noveld row still comes from E5 at
+           # lr 1e-3, since the shared lr 1e-4 floors it (E15); the row here is the floored twin.
+           # NOTE: GRU shows nvld-none = +.12 on BOTH densities (.63->.75, .65->.77), outside the
+           # +/-.05 null band that E3B satisfies. Candidate mechanism: Tiny terminates on the first
+           # wrong token, so any bonus that has NOT saturated acts as an implicit survival
+           # incentive. Caveat before believing it: none/e3b are n=3 while noveld is n=5 — backfill
+           # the baselines to n=5 before treating the gap as real.
            # Same project as the CORE arm so the nvld column sits beside none/e3b; the shared
            # HP is inherited (no Density.cfg override) so it is directly comparable to them.
            # Expect a null by construction: the token sequence is dictated on a fixed schedule,
@@ -306,6 +312,58 @@ METHODS = [
            [0, 1, 2, 3, 4], 10_000_000,
            "Table 3 nvld column (shared-protocol cells). With E5's GDN-noveld this makes the "
            "null replicate across E3B and NovelD, as amplify/equalize already do."),
+    Method("MCPG", "Monte-Carlo policy gradient — is the freeze a bootstrapping/PPO artifact?",
+           "MysteryPath-Grid-v0", "memrl-mpg-mcpg", ["GRU", "GatedDeltaNet"], ["none", "e3b_idm"],
+           # Reviewer defence for the freeze section ("is this because of PPO? actor-critic?").
+           # Our own mechanism for why a potential cannot reopen the freeze is CRITIC-based: the
+           # frozen policy is an absorbing fixed point whose critic targets are already satisfied.
+           # The direct test is therefore to REMOVE BOOTSTRAPPING, not to swap the optimizer:
+           #   gae_lambda=1.0 -> advantage = Monte-Carlo return minus a value baseline, i.e.
+           #                     REINFORCE-with-baseline; no bootstrapping anywhere.
+           #   n_epochs=1     -> no sample reuse; at the first gradient step the ratio is 1 so
+           #                     PPO's clipping is inert -> the update is vanilla policy gradient.
+           # Both are plain MemPPO constructor args, so this needs NO new code. (SB3 ships no
+           # REINFORCE, and MemPPO subclasses PPO with custom TBPTT/recurrent buffers, so an
+           # actual optimizer swap would mean reimplementing the recurrent machinery.) The one
+           # thing this cannot test is a baseline-free REINFORCE — SB3 always subtracts V(s) —
+           # but a baseline is variance reduction, not bootstrapping, so it is not the suspect.
+           # SPARSE IS NOT OPTIONAL: MC returns on a sparse +1 task over 128-step episodes are
+           # high-variance, so if sparse-none also fails to learn, the penalty arm is
+           # uninterpretable ("froze" vs "never learned"). Run sparse first as a viability gate.
+           [Density("sparse", cfg={"gae_lambda": 1.0, "n_epochs": 1}),
+            Density("penalty", env_kwargs={"reset_options": {"reward_fall_off": -0.008}},
+                    cfg={"gae_lambda": 1.0, "n_epochs": 1})],
+           [0, 1, 2], 20_000_000,
+           "Freeze + e3b-rescue reproduced without bootstrapping => not a PPO artifact (the "
+           "strongest card for the penalty section). Freeze absent => the critic-fixed-point "
+           "mechanism needs revising, which is worth knowing before a reviewer finds it."),
+    Method("MCPG", "Monte-Carlo policy gradient — is the freeze a PPO/bootstrapping artifact?",
+           "MysteryPath-Grid-v0", "memrl-mpg-mcpg", ["GRU", "GatedDeltaNet"], ["none", "e3b_idm"],
+           # Answers the standing reviewer attack on the freeze ("is this PPO? actor-critic?
+           # your implementation?"). The paper's freeze MECHANISM is explicitly critic-based —
+           # the frozen policy is an absorbing fixed point whose critic targets are already
+           # satisfied — so the direct test is to REMOVE BOOTSTRAPPING, not to change library.
+           #   gae_lambda=1.0 -> advantage = Monte-Carlo return - value baseline, i.e. exactly
+           #                     REINFORCE-with-baseline; no bootstrapping anywhere.
+           #   n_epochs=1     -> no sample reuse; at the first gradient step the ratio is 1 so
+           #                     PPO's clipping is inert -> the update is vanilla policy gradient.
+           # Config-only: both are existing MemPPO args, no new algorithm. (SB3 ships no
+           # REINFORCE, and MemPPO subclasses PPO for the TBPTT/recurrent-state machinery, so
+           # swapping the base algorithm would mean reimplementing all of it.) What this canNOT
+           # test is REINFORCE with NO baseline — SB3 always subtracts V(s) — but the baseline is
+           # variance reduction, not bootstrapping, and is not what the objection is about.
+           # RUN SPARSE FIRST as a viability gate: MC returns on a sparse +1 task with 128-step
+           # episodes are high-variance, and if sparse-none cannot learn at all then the penalty
+           # arm is uninterpretable (cannot show a penalty froze what never learned).
+           # Both outcomes are wins: freeze+rescue reproduce => NOT a PPO artifact (rebuttal
+           # card); freeze vanishes => the critic-fixed-point mechanism needs revising, which we
+           # would rather discover than have a reviewer discover.
+           [Density("sparse", cfg={"gae_lambda": 1.0, "n_epochs": 1}),
+            Density("penalty", env_kwargs={"reset_options": {"reward_fall_off": -0.008}},
+                    cfg={"gae_lambda": 1.0, "n_epochs": 1})],
+           [0, 1, 2], 20_000_000,
+           "Freeze/rescue without bootstrapping or PPO's clipped multi-epoch update: one weak "
+           "(GRU) and one strong (GDN) cell, none vs E3B, on the sparse and penalty arms."),
     Method("DISTRACT", "Distractor-reward ablation — structural vs reward sparsity (MysteryPath)",
            "MysteryPath-Grid-v0", "memrl-mpg-distractor", SIX, ["none", "e3b_idm", "noveld"],
            # Reviewer-2 control (DistractorRewardWrapper): +ε for revisiting an already-seen
