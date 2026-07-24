@@ -1,0 +1,65 @@
+% ==== Table 1: MysteryPath-Grid ====
+\begin{table*}[t]\centering
+\caption{MysteryPath-Grid: deterministic-policy success rate (tail mean over the final 20\% of eval checkpoints). Default $n{=}5$ seeds; a superscript gives the seed count where it differs. \textbf{Bold} marks the frozen ($.00$) penalty cells. On sparse the bonus's gains concentrate on the higher-baseline cells; the penalty freezes every cell and the bonus reopens it; on the dense \emph{aligned} reward the bonus is redundant, and on the dense-but-useless \emph{distractor} it is undiminished.}
+\label{tab:mpg}\small
+\begin{tabular}{@{}l ccc ccc ccc ccc@{}}\toprule
+ & \multicolumn{3}{c}{Sparse} & \multicolumn{3}{c}{Penalty} & \multicolumn{3}{c}{Aligned (dense)} & \multicolumn{3}{c}{Distractor (dense)} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+Cell & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld \\\midrule
+GRU & .13 & .18 & .18 & \textbf{.00} & .17 & .13 & .30 & .18 & .27 & .02 & .17 & .18 \\
+LSTM & .14 & .17 & .19 & \textbf{.00} & .17 & .13 & .28$^{4}$ & .20$^{4}$ & .26$^{4}$ & .05 & .18 & .20 \\
+RetNet & .17 & .55 & .54 & \textbf{.00} & .55 & .55 & .77 & .60 & .78 & .09 & .56 & .53 \\
+GatedDeltaNet & .16 & .63 & .60 & \textbf{.00}$^{6}$ & .59 & .61 & .68$^{6}$ & .67 & .83 & .00$^{6}$ & .62$^{6}$ & .56 \\
+Mamba-2 & .20 & .34 & .29 & \textbf{.00} & .32 & .25 & .42 & .31 & .44 & .00 & .35 & .28 \\
+Memoryless & .06 & .00 & .04 & \textbf{.00} & .00 & .01 & .05 & .01 & .05 & .02 & .00 & .04 \\
+\bottomrule\end{tabular}\end{table*}
+
+% ==== Table 2: MiniGrid-MemoryS13 ====
+\begin{table*}[t]\centering
+\caption{MiniGrid-MemoryS13: success rate (tail mean, final 20\% of eval checkpoints). Default $n{=}5$; superscripts mark $n{\neq}5$. At the discriminative $3\times3$ view the bonus lifts the chance-level cells toward the ceiling while the already-solving cells gain far less or slip; the penalty does \emph{not} freeze here (no zero-cost sanctuary) and the bonus stays effective; the distractor holds the optimum fixed yet the equalization is preserved. The $7\times7$ view is carried on sparse only---its no-bonus baselines saturate, which is why $3\times3$ is the discriminative setting.}
+\label{tab:s13}\small\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{@{}l ccc ccc ccc ccc@{}}\toprule
+ & \multicolumn{3}{c}{$3\times3$ Sparse} & \multicolumn{3}{c}{$3\times3$ Penalty} & \multicolumn{3}{c}{$3\times3$ Distractor} & \multicolumn{3}{c}{$7\times7$ Sparse} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+Cell & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld \\\midrule
+GRU & .50 & .90 & .80 & .50 & .95 & .97 & .49 & .85 & .96 & .79 & .93 & .99 \\
+LSTM & .50 & .98 & .98 & .49 & .94 & .97 & .49 & .98 & .99 & .66 & .95 & .97 \\
+RetNet & .49 & .89 & .73 & .49 & .84 & .85 & .50 & .82 & .63 & .62 & .98 & .96 \\
+GatedDeltaNet & .78 & .97 & .98 & .67 & .93 & .99 & .75 & .98 & 1.0$^{3}$ & .95 & .97 & .99 \\
+Mamba-2 & .85 & .69 & .93 & .77 & .92 & .89 & .63 & .86$^{4}$ & .84 & .86 & .93 & .97 \\
+Memoryless & .31 & .50 & .51 & .50 & .49 & .51 & .49$^{4}$ & .48 & .50 & .50 & .48 & .50 \\
+\bottomrule\end{tabular}\end{table*}
+
+% ==== Table 3: TinyReproduce ====
+\begin{table}[t]\centering
+\caption{TinyReproduce ($k{=}10$, reverse): exact-recall success rate (tail mean). Shared-hyperparameter block is $n{=}3$ for none/E3B and $n{=}4$--$5$ for NovelD; the tuned GatedDeltaNet row is $n{=}4$--$5$. Superscripts give the seed count where it differs from the block default. Both bonuses are inert on every cell with headroom ($|\Delta|{\le}.05$). RetNet, Mamba-2 and Memoryless do not learn the task at the shared rate and are reported floored; GatedDeltaNet is floored there too, hence the tuned row (learning rate $10^{-3}$), where it has headroom and the bonus still does nothing. The tuned row is not comparable to the block above it.}
+\label{tab:tiny}\small\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}l ccc ccc@{}}\toprule
+ & \multicolumn{3}{c}{Sparse} & \multicolumn{3}{c}{Dense} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Cell & none & e3b & nvld & none & e3b & nvld \\\midrule
+GRU & .67 & .61 & .65 & .71 & .65 & .72 \\
+LSTM & .82 & .83 & .83$^{4}$ & .84 & .84 & .85$^{4}$ \\
+RetNet & .00 & .00 & .00 & .00 & .00 & .00 \\
+GatedDeltaNet & .01 & .11 & .01 & .08 & .07 & .11 \\
+Mamba-2 & .00 & .01 & .00$^{4}$ & .00 & .01 & .00 \\
+Memoryless & .00 & .00 & .00$^{4}$ & .00 & .00 & .00$^{4}$ \\
+\midrule
+GatedDeltaNet (tuned) & .37 & .29 & .40 & .35 & .30 & .39 \\
+\bottomrule\end{tabular}\end{table}
+
+% ==== cross-architecture spread (std over the 5 memory cells) ====
+% MysteryPath sparse: std[none]=0.024  std[e3b_idm]=0.187  std[noveld]=0.178  
+% MemoryS13 3x3 sparse: std[none]=0.155  std[e3b_idm]=0.103  std[noveld]=0.100  
+% ==== Appendix: episode falls on MysteryPath sparse (rollout/ep_num_fails_mean) ====
+\begin{table}[t]\centering
+\caption{MysteryPath sparse: mean falls per episode ($n{=}5$). The memoryless agent under E3B covers the most ground yet never succeeds.}
+\label{tab:falls}\small\begin{tabular}{@{}lcc@{}}\toprule
+Cell & none & E3B \\\midrule
+GRU & 9.0 & 15.1 \\
+LSTM & 13.7 & 15.7 \\
+RetNet & 12.1 & 8.1 \\
+GatedDeltaNet & 16.2 & 7.2 \\
+Mamba-2 & 15.8 & 11.9 \\
+Memoryless & 39.6 & 25.4 \\
+\bottomrule\end{tabular}\end{table}

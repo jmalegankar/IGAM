@@ -124,7 +124,11 @@ CORE = [
             _mpg("aligned", reward_path_progress=0.1)],
            20_000_000,
            "α>0 probing · F1 decodability · F2 freeze/rescue · F3 RIDE (3rd family) · "
-           "entanglement · P5 · 20M HEADLINE (sparse none-vs-e3b slice)"),
+           "entanglement · P5 · 20M HEADLINE (sparse none-vs-e3b slice)",
+           # n=10 (2026-07-24): seeds 0-4 complete, 5-9 added to firm up the tables
+           # (esp. the marginal S13 spread). RIDE seeds 5-9 emit too but are not launched
+           # (paper set = none/e3b/noveld); filter with ONLY on launch.
+           seeds=list(range(10))),
     EnvArm("MortarMayhem", "MortarMayhem-Grid-v0", "memrl-memtrain-mm", FOUR,
            ["none", "e3b_idm", "pbim_e3b_idm"],
            [Density("sparse", env_kwargs={"reset_options": {"command_count": [4],
@@ -161,26 +165,32 @@ CORE = [
            # S13's OWN tuned HP (the values that solved it in memrl-s13-baseline) — NOT the
            # MysteryPath global HP. Delayed cross-corridor reward needs the longer credit
            # horizon (gamma/λ) and lr 3e-4.
-           hp={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4}),
+           hp={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4},
+           seeds=list(range(10))),   # n=10 (2026-07-24): seeds 5-9 added; ride not launched
     EnvArm("Battleship", "popgym-BattleshipEasy-v0", "memrl-memtrain-battleship", FOUR,
            ["none", "e3b_idm"],
            [Density("dense", env_kwargs={"expose_action_coords": True}),
             Density("sparse", env_kwargs={"expose_action_coords": True, "defer_reward": True})],
            10_000_000,
            "α>0 probing (2nd positive env) → generalizes 'bonus helps' beyond MysteryPath"),
-    EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-memtrain-tiny",
-           SIX + ["GTrXL", "LinearTransformer"],   # +full-attn + linear-attn: does
-           # attention beat the SSM exact-recall floor? (Jelassi "Repeat After Me")
-           # NovelD is NOT on this arm: it is scoped to the 3 reported cells via the
-           # TINYNVLD Method (GRU/LSTM at this shared HP) + E5 (GDN at lr 1e-3, since
-           # the shared lr 1e-4 floors GDN to ~0.00). Running noveld across all 8 cells
-           # here would be 80 runs for 5 cells the table never reports.
-           ["none", "e3b_idm"],
+    EnvArm("TinyReproduce", "TinyReproduce-v0", "memrl-tiny-1e3", SIX,
+           # UNIFIED HP (2026-07-24): all six cells at lr=1e-3 (GDN's per-cell-best from
+           # E15), full none/e3b/noveld cross, seeds 0-9. Replaces the old split protocol
+           # (lr 1e-4 CORE none/e3b + TINYNVLD noveld + E5 GDN-tuned), which mixed two
+           # learning rates and left GDN/RetNet/Mamba2 floored at the shared 1e-4. One rate
+           # for every cell removes the per-architecture-tuning objection AND (if 1e-3 gives
+           # the weak RNNs headroom) makes the null informative on every row. GTrXL/
+           # LinearTransformer dropped (never run, not in the table). RISK: 1e-3 is 10x the
+           # rate GRU/LSTM were validated at (.63/.82 at 1e-4) and was tuned for GDN, not
+           # them — it may destabilize or floor the RNNs. PILOT GRU/LSTM at 1e-3 (2-3 seeds)
+           # BEFORE the full 360-run launch; if they crater, the null becomes uninformative.
+           ["none", "e3b_idm", "noveld"],
            [Density("sparse", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "sparse"}),
             Density("dense", env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
            10_000_000,
-           "α≈0 retention (k=10,v=4, reverse) · known RM · CLEAN lag-Δ retention probe "
-           "(Autoencode-52 is unlearnable; this is the tractable tunable version)"),
+           "α≈0 retention (k=10,v=4, reverse) · unified lr=1e-3, n=10 · known RM · "
+           "CLEAN lag-Δ retention probe (Autoencode-52 is unlearnable; this is tractable)",
+           seeds=list(range(10)), hp={"lr": 1.0e-3}),
     EnvArm("SearingSpotlights", "SearingSpotlights-v0", "memrl-memtrain-ss", FOUR,
            ["none", "e3b_idm"],
            [Density("sparse"),
@@ -286,7 +296,9 @@ METHODS = [
                     cfg={"lr": 1e-3, "cell": {"name": "GatedDeltaNet", "kwargs": {"assoc_size": 64}}})],
            [0, 1, 2, 3, 4], 10_000_000,
            "α≈0 at GDN best HP: E3B−none within margin even with headroom ⇒ bonus genuinely "
-           "inert, not a floor artifact. Pairs with E15."),
+           "inert, not a floor artifact. Pairs with E15.",
+           blocked_on="SUPERSEDED (2026-07-24): the unified TinyReproduce arm runs ALL cells "
+                      "at lr=1e-3 (this arm's GDN row is now just one cell of it)."),
     Method("TINYNVLD", "NovelD on TinyReproduce — the NULL sign at a 2nd bonus (all six cells)",
            "TinyReproduce-v0", "memrl-memtrain-tiny", SIX, ["noveld"],
            # Fills Table 3's open nvld column so the NULL third sign replicates across BOTH
@@ -311,7 +323,9 @@ METHODS = [
             Density("dense",  env_kwargs={"k": 10, "v": 4, "order": "reverse", "density": "dense"})],
            [0, 1, 2, 3, 4], 10_000_000,
            "Table 3 nvld column (shared-protocol cells). With E5's GDN-noveld this makes the "
-           "null replicate across E3B and NovelD, as amplify/equalize already do."),
+           "null replicate across E3B and NovelD, as amplify/equalize already do.",
+           blocked_on="SUPERSEDED (2026-07-24) by the unified TinyReproduce arm "
+                      "(lr=1e-3, all cells, none/e3b/noveld, n=10 -> memrl-tiny-1e3)."),
     Method("MCPG", "Monte-Carlo policy gradient — is the freeze a bootstrapping/PPO artifact?",
            "MysteryPath-Grid-v0", "memrl-mpg-mcpg", ["GRU", "GatedDeltaNet"], ["none", "e3b_idm"],
            # Reviewer defence for the freeze section ("is this because of PPO? actor-critic?").
@@ -374,7 +388,7 @@ METHODS = [
            # PERSISTS here (Δstrong−Δweak under e3b ≈ sparse's) while it VANISHES on aligned ⇒
            # structural sparsity ≠ reward sparsity. No RIDE arm (RIDE fall-farms on MPG regardless).
            [Density("distractor", env_kwargs={"distractor": {"eps_frac": 0.1}})],
-           [0, 1, 2, 3, 4], 20_000_000,
+           list(range(10)), 20_000_000,   # n=10 (2026-07-24): seeds 5-9 added
            "Kills 'your effect is just reward sparsity' — dense-but-useless reward, same density "
            "as aligned, opposite usefulness; bonus still amplifies ⇒ it's the acquisition structure."),
     Method("DISTRACTS13", "Distractor-reward ablation — structural vs reward sparsity (S13 retention)",
@@ -401,7 +415,7 @@ METHODS = [
                     env_kwargs={"agent_view_size": 3, "reward_mode": "flat",
                                 "distractor": {"eps_frac": 0.1}},   # matches the reported runs; ε/(1-γ)=0.118 (8× margin)
                     cfg={"gamma": 0.999, "gae_lambda": 0.98, "chunk_len": 32, "lr": 3.0e-4})],
-           [0, 1, 2, 3, 4], 20_000_000,
+           list(range(10)), 20_000_000,   # n=10 (2026-07-24): seeds 5-9 added
            "Symmetric to DISTRACT: dense-but-useless reward on the EQUALIZE env; bonus still "
            "equalizes ⇒ retention equalization is structural, not reward-frequency. 3×3 only."),
     # ── NORMALIZED-PBIM RELAUNCH — pbim3 (2026-07-13) ─────────────────────────

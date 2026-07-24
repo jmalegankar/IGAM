@@ -1,0 +1,40 @@
+env_name: MiniGrid-MemoryS13-v0
+env_kwargs:
+  agent_view_size: 7
+  reward_mode: flat
+n_envs: 16
+total_timesteps: 20000000
+seed: 0
+cell:
+  name: GatedDeltaNet
+  kwargs:
+    assoc_size: 64
+encoder_dim: 128
+encoder_hidden: 256
+lr: 0.0003
+n_steps: 512
+n_epochs: 4
+gamma: 0.999
+gae_lambda: 0.98
+clip_range: 0.2
+ent_coef: 0.008
+vf_coef: 1.0
+max_grad_norm: 0.5
+target_kl: 0.05
+chunk_len: 32
+n_chunks_per_batch: 32
+intrinsic: ride
+lambda_intrinsic: 0.005
+eval_every_rollouts: 10
+n_eval_episodes: 20
+wandb: true
+wandb_project: memrl-s13-matched
+wandb_group: sparseV7
+wandb_job_type: ride
+wandb_tags:
+- E1
+- S13
+- GatedDeltaNet
+- sparseV7
+- ride
+run_name: GatedDeltaNet-sparseV7-ride

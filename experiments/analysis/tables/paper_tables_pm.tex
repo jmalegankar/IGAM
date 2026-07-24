@@ -1,0 +1,65 @@
+% ==== Table 1: MysteryPath-Grid ====
+\begin{table*}[t]\centering
+\caption{MysteryPath-Grid: deterministic-policy success rate (tail mean over the final 20\% of eval checkpoints). Default $n{=}5$ seeds; a superscript gives the seed count where it differs. \textbf{Bold} marks the frozen ($.00$) penalty cells. On sparse the bonus's gains concentrate on the higher-baseline cells; the penalty freezes every cell and the bonus reopens it; on the dense \emph{aligned} reward the bonus is redundant, and on the dense-but-useless \emph{distractor} it is undiminished.}
+\label{tab:mpg}\small
+\begin{tabular}{@{}l ccc ccc ccc ccc@{}}\toprule
+ & \multicolumn{3}{c}{Sparse} & \multicolumn{3}{c}{Penalty} & \multicolumn{3}{c}{Aligned (dense)} & \multicolumn{3}{c}{Distractor (dense)} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+Cell & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld \\\midrule
+GRU & .13{\scriptsize$\pm$.01} & .18{\scriptsize$\pm$.01} & .18{\scriptsize$\pm$.02} & \textbf{.00}{\scriptsize$\pm$.00} & .17{\scriptsize$\pm$.01} & .13{\scriptsize$\pm$.01} & .30{\scriptsize$\pm$.02} & .18{\scriptsize$\pm$.00} & .27{\scriptsize$\pm$.02} & .02{\scriptsize$\pm$.06} & .17{\scriptsize$\pm$.02} & .18{\scriptsize$\pm$.02} \\
+LSTM & .14{\scriptsize$\pm$.01} & .17{\scriptsize$\pm$.02} & .19{\scriptsize$\pm$.02} & \textbf{.00}{\scriptsize$\pm$.00} & .17{\scriptsize$\pm$.02} & .13{\scriptsize$\pm$.01} & .28{\scriptsize$\pm$.02}$^{4}$ & .20{\scriptsize$\pm$.01}$^{4}$ & .26{\scriptsize$\pm$.01}$^{4}$ & .05{\scriptsize$\pm$.07} & .18{\scriptsize$\pm$.02} & .20{\scriptsize$\pm$.02} \\
+RetNet & .17{\scriptsize$\pm$.04} & .55{\scriptsize$\pm$.05} & .54{\scriptsize$\pm$.03} & \textbf{.00}{\scriptsize$\pm$.00} & .55{\scriptsize$\pm$.03} & .55{\scriptsize$\pm$.04} & .77{\scriptsize$\pm$.05} & .60{\scriptsize$\pm$.04} & .78{\scriptsize$\pm$.05} & .09{\scriptsize$\pm$.05} & .56{\scriptsize$\pm$.03} & .53{\scriptsize$\pm$.05} \\
+GatedDeltaNet & .16{\scriptsize$\pm$.02} & .63{\scriptsize$\pm$.05} & .60{\scriptsize$\pm$.05} & \textbf{.00}{\scriptsize$\pm$.00}$^{6}$ & .59{\scriptsize$\pm$.05} & .61{\scriptsize$\pm$.04} & .68{\scriptsize$\pm$.10}$^{6}$ & .67{\scriptsize$\pm$.04} & .83{\scriptsize$\pm$.05} & .00{\scriptsize$\pm$.01}$^{6}$ & .62{\scriptsize$\pm$.04}$^{6}$ & .56{\scriptsize$\pm$.05} \\
+Mamba-2 & .20{\scriptsize$\pm$.03} & .34{\scriptsize$\pm$.06} & .29{\scriptsize$\pm$.03} & \textbf{.00}{\scriptsize$\pm$.00} & .32{\scriptsize$\pm$.05} & .25{\scriptsize$\pm$.03} & .42{\scriptsize$\pm$.04} & .31{\scriptsize$\pm$.03} & .44{\scriptsize$\pm$.06} & .00{\scriptsize$\pm$.00} & .35{\scriptsize$\pm$.07} & .28{\scriptsize$\pm$.04} \\
+Memoryless & .06{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .04{\scriptsize$\pm$.01} & \textbf{.00}{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .01{\scriptsize$\pm$.01} & .05{\scriptsize$\pm$.00} & .01{\scriptsize$\pm$.00} & .05{\scriptsize$\pm$.01} & .02{\scriptsize$\pm$.03} & .00{\scriptsize$\pm$.00} & .04{\scriptsize$\pm$.01} \\
+\bottomrule\end{tabular}\end{table*}
+
+% ==== Table 2: MiniGrid-MemoryS13 ====
+\begin{table*}[t]\centering
+\caption{MiniGrid-MemoryS13: success rate (tail mean, final 20\% of eval checkpoints). Default $n{=}5$; superscripts mark $n{\neq}5$. At the discriminative $3\times3$ view the bonus lifts the chance-level cells toward the ceiling while the already-solving cells gain far less or slip; the penalty does \emph{not} freeze here (no zero-cost sanctuary) and the bonus stays effective; the distractor holds the optimum fixed yet the equalization is preserved. The $7\times7$ view is carried on sparse only---its no-bonus baselines saturate, which is why $3\times3$ is the discriminative setting.}
+\label{tab:s13}\small\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{@{}l ccc ccc ccc ccc@{}}\toprule
+ & \multicolumn{3}{c}{$3\times3$ Sparse} & \multicolumn{3}{c}{$3\times3$ Penalty} & \multicolumn{3}{c}{$3\times3$ Distractor} & \multicolumn{3}{c}{$7\times7$ Sparse} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+Cell & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld & none & e3b & nvld \\\midrule
+GRU & .50{\scriptsize$\pm$.02} & .90{\scriptsize$\pm$.10} & .80{\scriptsize$\pm$.25} & .50{\scriptsize$\pm$.01} & .95{\scriptsize$\pm$.03} & .97{\scriptsize$\pm$.02} & .49{\scriptsize$\pm$.01} & .85{\scriptsize$\pm$.08} & .96{\scriptsize$\pm$.04} & .79{\scriptsize$\pm$.22} & .93{\scriptsize$\pm$.14} & .99{\scriptsize$\pm$.00} \\
+LSTM & .50{\scriptsize$\pm$.01} & .98{\scriptsize$\pm$.02} & .98{\scriptsize$\pm$.05} & .49{\scriptsize$\pm$.01} & .94{\scriptsize$\pm$.06} & .97{\scriptsize$\pm$.02} & .49{\scriptsize$\pm$.01} & .98{\scriptsize$\pm$.03} & .99{\scriptsize$\pm$.02} & .66{\scriptsize$\pm$.20} & .95{\scriptsize$\pm$.09} & .97{\scriptsize$\pm$.03} \\
+RetNet & .49{\scriptsize$\pm$.03} & .89{\scriptsize$\pm$.12} & .73{\scriptsize$\pm$.22} & .49{\scriptsize$\pm$.01} & .84{\scriptsize$\pm$.14} & .85{\scriptsize$\pm$.13} & .50{\scriptsize$\pm$.01} & .82{\scriptsize$\pm$.21} & .63{\scriptsize$\pm$.20} & .62{\scriptsize$\pm$.16} & .98{\scriptsize$\pm$.02} & .96{\scriptsize$\pm$.05} \\
+GatedDeltaNet & .78{\scriptsize$\pm$.19} & .97{\scriptsize$\pm$.05} & .98{\scriptsize$\pm$.03} & .67{\scriptsize$\pm$.19} & .93{\scriptsize$\pm$.09} & .99{\scriptsize$\pm$.01} & .75{\scriptsize$\pm$.23} & .98{\scriptsize$\pm$.02} & 1.0{\scriptsize$\pm$.00}$^{3}$ & .95{\scriptsize$\pm$.11} & .97{\scriptsize$\pm$.06} & .99{\scriptsize$\pm$.02} \\
+Mamba-2 & .85{\scriptsize$\pm$.17} & .69{\scriptsize$\pm$.27} & .93{\scriptsize$\pm$.04} & .77{\scriptsize$\pm$.34} & .92{\scriptsize$\pm$.11} & .89{\scriptsize$\pm$.10} & .63{\scriptsize$\pm$.21} & .86{\scriptsize$\pm$.13}$^{4}$ & .84{\scriptsize$\pm$.20} & .86{\scriptsize$\pm$.19} & .93{\scriptsize$\pm$.14} & .97{\scriptsize$\pm$.02} \\
+Memoryless & .31{\scriptsize$\pm$.28} & .50{\scriptsize$\pm$.01} & .51{\scriptsize$\pm$.01} & .50{\scriptsize$\pm$.01} & .49{\scriptsize$\pm$.02} & .51{\scriptsize$\pm$.01} & .49{\scriptsize$\pm$.00}$^{4}$ & .48{\scriptsize$\pm$.02} & .50{\scriptsize$\pm$.01} & .50{\scriptsize$\pm$.01} & .48{\scriptsize$\pm$.02} & .50{\scriptsize$\pm$.01} \\
+\bottomrule\end{tabular}\end{table*}
+
+% ==== Table 3: TinyReproduce ====
+\begin{table}[t]\centering
+\caption{TinyReproduce ($k{=}10$, reverse): exact-recall success rate (tail mean). Shared-hyperparameter block is $n{=}3$ for none/E3B and $n{=}4$--$5$ for NovelD; the tuned GatedDeltaNet row is $n{=}4$--$5$. Superscripts give the seed count where it differs from the block default. Both bonuses are inert on every cell with headroom ($|\Delta|{\le}.05$). RetNet, Mamba-2 and Memoryless do not learn the task at the shared rate and are reported floored; GatedDeltaNet is floored there too, hence the tuned row (learning rate $10^{-3}$), where it has headroom and the bonus still does nothing. The tuned row is not comparable to the block above it.}
+\label{tab:tiny}\small\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}l ccc ccc@{}}\toprule
+ & \multicolumn{3}{c}{Sparse} & \multicolumn{3}{c}{Dense} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Cell & none & e3b & nvld & none & e3b & nvld \\\midrule
+GRU & .67{\scriptsize$\pm$.01} & .61{\scriptsize$\pm$.04} & .65{\scriptsize$\pm$.06} & .71{\scriptsize$\pm$.01} & .65{\scriptsize$\pm$.02} & .72{\scriptsize$\pm$.02} \\
+LSTM & .82{\scriptsize$\pm$.04} & .83{\scriptsize$\pm$.04} & .83{\scriptsize$\pm$.04}$^{4}$ & .84{\scriptsize$\pm$.02} & .84{\scriptsize$\pm$.04} & .85{\scriptsize$\pm$.02}$^{4}$ \\
+RetNet & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} \\
+GatedDeltaNet & .01{\scriptsize$\pm$.01} & .11{\scriptsize$\pm$.18} & .01{\scriptsize$\pm$.01} & .08{\scriptsize$\pm$.12} & .07{\scriptsize$\pm$.11} & .11{\scriptsize$\pm$.12} \\
+Mamba-2 & .00{\scriptsize$\pm$.00} & .01{\scriptsize$\pm$.01} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .01{\scriptsize$\pm$.01} & .00{\scriptsize$\pm$.00} \\
+Memoryless & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} & .00{\scriptsize$\pm$.00} \\
+\midrule
+GatedDeltaNet (tuned) & .37{\scriptsize$\pm$.05} & .29{\scriptsize$\pm$.06} & .40{\scriptsize$\pm$.07} & .35{\scriptsize$\pm$.09} & .30{\scriptsize$\pm$.07} & .39{\scriptsize$\pm$.08} \\
+\bottomrule\end{tabular}\end{table}
+
+% ==== cross-architecture spread (std over the 5 memory cells) ====
+% MysteryPath sparse: std[none]=0.024  std[e3b_idm]=0.187  std[noveld]=0.178  
+% MemoryS13 3x3 sparse: std[none]=0.155  std[e3b_idm]=0.103  std[noveld]=0.100  
+% ==== Appendix: episode falls on MysteryPath sparse (rollout/ep_num_fails_mean) ====
+\begin{table}[t]\centering
+\caption{MysteryPath sparse: mean falls per episode ($n{=}5$). The memoryless agent under E3B covers the most ground yet never succeeds.}
+\label{tab:falls}\small\begin{tabular}{@{}lcc@{}}\toprule
+Cell & none & E3B \\\midrule
+GRU & 9.0 & 15.1 \\
+LSTM & 13.7 & 15.7 \\
+RetNet & 12.1 & 8.1 \\
+GatedDeltaNet & 16.2 & 7.2 \\
+Mamba-2 & 15.8 & 11.9 \\
+Memoryless & 39.6 & 25.4 \\
+\bottomrule\end{tabular}\end{table}

@@ -15,7 +15,7 @@ cell:
     expand: 2
 encoder_dim: 128
 encoder_hidden: 256
-lr: 0.0001
+lr: 0.001
 n_steps: 512
 n_epochs: 4
 gamma: 0.995
@@ -31,7 +31,7 @@ intrinsic: none
 eval_every_rollouts: 10
 n_eval_episodes: 20
 wandb: true
-wandb_project: memrl-memtrain-tiny
+wandb_project: memrl-tiny-1e3
 wandb_group: dense
 wandb_job_type: none
 wandb_tags:
